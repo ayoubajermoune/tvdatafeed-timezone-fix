@@ -63,15 +63,21 @@ datetime             open     high     low      close    volume
 
 ## التثبيت (Install)
 
+الطريقة الموصى بها — مباشرة من مستودع GitHub (نفس طريقة المكتبة الأصلية):
+
 ```bash
+pip install --upgrade --no-cache-dir git+https://github.com/ayoubajermoune/tvdatafeed-timezone-fix.git
+```
+
+طرق بديلة:
+
+```bash
+# 1) نسخ المستودع ثم التثبيت
 git clone https://github.com/ayoubajermoune/tvdatafeed-timezone-fix
 cd tvdatafeed-timezone-fix
 pip install .
-```
 
-أو التثبيت في وضع التطوير:
-
-```bash
+# 2) التثبيت في وضع التطوير (لتعديل الكود)
 pip install -e .
 ```
 

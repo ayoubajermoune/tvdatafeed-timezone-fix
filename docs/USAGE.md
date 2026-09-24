@@ -10,19 +10,26 @@
 - Python ≥ 3.8
 - الحزم: `pandas`, `websocket-client`, `requests` (تُثبَّت تلقائياً)
 
-### الطريقة 1: التثبيت من المستودع (مستحسن)
+### الطريقة 1: التثبيت مباشرة من مستودع GitHub (الطريقة الموصى بها)
+نفس طريقة تثبيت المكتبة الأصلية — أمر واحد مباشر:
+
+```bash
+pip install --upgrade --no-cache-dir git+https://github.com/ayoubajermoune/tvdatafeed-timezone-fix.git
+```
+
+### الطريقة 2: نسخ المستودع ثم التثبيت
 ```bash
 git clone https://github.com/ayoubajermoune/tvdatafeed-timezone-fix
 cd tvdatafeed-timezone-fix
 pip install .
 ```
 
-### الطريقة 2: التثبيت في وضع التطوير (لتعديل الكود)
+### الطريقة 3: التثبيت في وضع التطوير (لتعديل الكود)
 ```bash
 pip install -e .
 ```
 
-### الطريقة 3: إضافة المسار مباشرة (بدون تثبيت)
+### الطريقة 4: إضافة المسار مباشرة (بدون تثبيت)
 ```python
 import sys
 sys.path.insert(0, "/المسار/إلى/tvdatafeed-timezone-fix")
