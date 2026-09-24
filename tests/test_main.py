@@ -148,3 +148,9 @@ def test_invalid_timezone_raises_without_network():
     tv = TvDatafeed.__new__(TvDatafeed)  # skip __init__ (no network)
     with pytest.raises(ValueError, match="Invalid timezone"):
         tv.get_hist("XAUUSD", "BLACKBULL", timezone="Not/AZone")
+
+def test_index_name_is_datetime():
+    """reset_index() must yield a predictable 'datetime' column."""
+    df = parse()
+    assert df.index.name == "datetime"
+    assert list(df.reset_index().columns)[0] == "datetime"

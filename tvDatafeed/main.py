@@ -248,6 +248,10 @@ class TvDatafeed:
                 # machine's local clock.
                 idx = idx.tz_localize(None)
 
+            # Index arithmetic (e.g. the +1 day shift above) silently drops the
+            # index name; restore it so df.reset_index() yields a consistent
+            # "datetime" column for downstream consumers.
+            idx.name = "datetime"
             data.index = idx
             data.attrs["timezone"] = target_tz
             data.attrs["aligned_to_trading_day"] = aligned
