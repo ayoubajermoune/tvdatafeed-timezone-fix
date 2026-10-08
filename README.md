@@ -108,6 +108,58 @@ data = tv.get_hist(..., align_daily_to_trading_day=False)
 
 مثال عملي كامل في `examples/example_usage.py`.
 
+### البحث عن الرمز — `search_symbol(text, exchange='')`
+
+قبل تحميل البيانات، يمكنك التحقق من صحة الرمز والبحث عنه على TradingView:
+
+```python
+from tvDatafeed import TvDatafeed
+
+tv = TvDatafeed()
+
+# 1) بحث عام
+results = tv.search_symbol("gold")
+
+# 2) بحث داخل بورصة محددة (أنصح به — أسرع وأدق)
+results = tv.search_symbol("XAUUSD", "BLACKBULL")
+```
+
+**المعاملات:**
+
+| المعامل | النوع | الافتراضي | الوصف |
+|---|---|---|---|
+| `text` | `str` | — | نص البحث (اسم الرمز أو وصفه) |
+| `exchange` | `str` | `""` | تقييد البحث ببورصة معينة |
+
+**الناتج:** قائمة من القواميس، مثال على عنصر واحد:
+
+```python
+[
+    {
+        "symbol": "XAUUSD",
+        "exchange": "BLACKBULL",
+        "description": "Gold/US Dollar",
+        "type": "commodity",
+        ...
+    },
+    ...
+]
+```
+
+> **ملاحظة:** الرمز يُرسل إلى `get_hist` بالصيغة `EXCHANGE:SYMBOL` (مثل `BLACKBULL:XAUUSD`) —
+> تحقق أولاً من `symbol` و `exchange` في نتائج البحث قبل التحميل، وارمِ `ValueError` إذا لم يظهر
+> الرمز المطلوب (نفس ما تفعله `TvDatafeedLive.new_seis` داخلياً).
+
+استخدام عملي:
+
+```python
+matches = tv.search_symbol("XAUUSD", "BLACKBULL")
+if not any(m["symbol"] == "XAUUSD" and m["exchange"] == "BLACKBULL" for m in matches):
+    raise ValueError("الرمز غير موجود في هذه البورصة")
+
+data = tv.get_hist(symbol="XAUUSD", exchange="BLACKBULL", n_bars=10)
+```
+
 ### كيف أعرف المنطقة الزمنية للبيانات؟
 
 ```python
@@ -162,6 +214,7 @@ This fork fixes both:
 
 - **`get_hist(..., timezone=)`** — `"UTC"` (default, tz-aware), any IANA name (`"Africa/Cairo"`, `"Asia/Riyadh"`, ...), or `"exchange"` (naive, exchange clock). The index is always tz-aware / deterministic: `data.index.tz` tells you exactly what you are looking at.
 - **`get_hist(..., align_daily_to_trading_day=True)`** — daily bars that open at/after 12:00 local time span midnight, so they are dated by their **closing (trading) day**. The last bar is now dated *today*.
+- **`search_symbol(text, exchange='')`** — validate and look up a symbol on TradingView before downloading data (returns a list of dicts with `symbol`, `exchange`, `description`, ...).
 
 OHLCV values are untouched; only the datetime column and timezone semantics changed. Offline test suite included (`pytest tests`).
 
