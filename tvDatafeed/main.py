@@ -35,20 +35,30 @@ class TvDatafeed:
     __search_url = 'https://symbol-search.tradingview.com/symbol_search/?text={}&hl=1&exchange={}&lang=en&type=&domain=production'
     __ws_headers = json.dumps({"Origin": "https://data.tradingview.com"})
     __signin_headers = {'Referer': 'https://www.tradingview.com'}
+    __user_agent = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    )
     __ws_timeout = 5
 
     def __init__(
         self,
         username: str = None,
         password: str = None,
+        proxies: dict = None,
     ) -> None:
         """Create TvDatafeed object
 
         Args:
             username (str, optional): tradingview username. Defaults to None.
             password (str, optional): tradingview password. Defaults to None.
+            proxies (dict, optional): http(s) proxy mapping used for all REST
+                calls, e.g. ``{"https": "http://user:pass@proxy:8080"}``.
+                Useful to bypass IP blocks in cloud/notebook environments.
+                Defaults to None (no proxy).
         """
 
+        self.proxies = proxies or {}
         self.ws_debug = False
 
         self.token = self.__auth(username, password)
@@ -73,8 +83,11 @@ class TvDatafeed:
                     "password": password,
                     "remember": "on"}
             try:
+                headers = {**self.__signin_headers,
+                           "User-Agent": self.__user_agent}
                 response = requests.post(
-                    url=self.__sign_in_url, data=data, headers=self.__signin_headers)
+                    url=self.__sign_in_url, data=data, headers=headers,
+                    timeout=10, proxies=self.proxies)
                 token = response.json()['user']['auth_token']
             except Exception as e:
                 logger.error('error while signin')
@@ -424,7 +437,12 @@ class TvDatafeed:
         url = self.__search_url.format(text, exchange)
         symbols_list = []
         try:
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(
+                url,
+                timeout=10,
+                headers={"User-Agent": self.__user_agent},
+                proxies=self.proxies,
+            )
             resp.raise_for_status()
             symbols_list = json.loads(resp.text.replace(
                 '</em>', '').replace('<em>', ''))
@@ -448,3 +466,4 @@ if __name__ == "__main__":
             extended_session=False,
         )
     )
+

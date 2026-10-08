@@ -154,6 +154,19 @@ results = tv.search_symbol("XAUUSD", "BLACKBULL")
 > تُرجَع قائمة فارغة `[]` مع رسالة خطأ في اللوج — **لا يُرمى أي استثناء**. فتأكد دائماً من
 > فحص الناتج قبل الافتراض أن الرمز غير موجود.
 
+> **403 / الشبكات المحجوبة (Colab / notebooks سحابية):** إذا ظهر `403 Client Error`
+> أو `[]` بشكل دائم، فغالباً عنوان IP لبيئتك محجوب لدى TradingView. تمرير **وكيل** خاص بك
+> عبر منشئ الكائن (`proxies`) يوجّه كل طلبات REST (البحث والدخول) من خلاله:
+>
+> ```python
+> tv = TvDatafeed(proxies={"http": "http://user:pass@proxy:8080",
+>                          "https": "http://user:pass@proxy:8080"})
+> results = tv.search_symbol("XAUUSD", "BLACKBULL")
+> ```
+>
+> يُستخدم أيضاً `User-Agent` متصفح واقعي تلقائياً في كل الطلبات. جرّب أولاً من جهازك المحلي
+> (عنوان IP منزلي عادة غير محجوب) قبل إعداد الوكيل.
+
 استخدام عملي:
 
 ```python
@@ -227,4 +240,5 @@ OHLCV values are untouched; only the datetime column and timezone semantics chan
 ## الرخصة (License)
 
 MIT — نفس رخصة المستودع الأصلي / Same license as upstream.
+
 

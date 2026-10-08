@@ -162,9 +162,11 @@ def test_index_name_is_datetime():
 from unittest import mock
 
 
-def _tv():
+def _tv(proxies=None):
     # build a TvDatafeed without touching the network (skip __init__)
-    return TvDatafeed.__new__(TvDatafeed)
+    tv = TvDatafeed.__new__(TvDatafeed)
+    tv.proxies = proxies or {}
+    return tv
 
 
 def _resp(status_code, text, exc=None):
@@ -214,4 +216,28 @@ def test_search_symbol_returns_empty_list_on_connection_error():
     with mock.patch("tvDatafeed.main.requests.get",
                     side_effect=__import__("requests").exceptions.ConnectionError("boom")):
         assert tv.search_symbol("gold") == []
+
+
+def test_search_symbol_sends_user_agent_and_proxies():
+    tv = _tv(proxies={"https": "http://proxy.example:8080"})
+    with mock.patch("tvDatafeed.main.requests.get", return_value=_resp(200, "[]")) as get:
+        tv.search_symbol("gold")
+    kwargs = get.call_args[1]
+    assert kwargs["timeout"] == 10
+    assert kwargs["proxies"] == {"https": "http://proxy.example:8080"}
+    ua = kwargs["headers"]["User-Agent"]
+    assert ua.startswith("Mozilla/5.0")
+    assert "Chrome" in ua
+
+
+def test_tvdatafeed_accepts_proxies_param_offline():
+    """TvDatafeed(proxies=...) must not need network (nologin path)."""
+    tv = TvDatafeed(proxies={"https": "http://proxy.example:8080"})
+    assert tv.proxies == {"https": "http://proxy.example:8080"}
+
+
+def test_tvdatafeed_proxies_defaults_to_empty_dict():
+    tv = TvDatafeed()
+    assert tv.proxies == {}
+
 
