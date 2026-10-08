@@ -137,11 +137,138 @@ print("المنطقة الزمنية:", df.index.tz)
 
 ---
 
-### `search_symbol(text, exchange='')` — البحث عن رمز
+### `search_symbol(...)` — البحث عن الرمز (بدون تسجيل دخول)
+
+بحث في TradingView بالاسم أو الوصف مع فلترة اختيارية **بالنوع** (سلع، سندات، فوريكس، أسهم، ...) و**بالدولة**، **دون الحاجة إلى حساب أو تسجيل دخول**، بل ودون الحاجة حتى إلى إنشاء كائن:
 
 ```python
-tv.search_symbol("gold")        # قائمة بالرموز المطابقة
-tv.search_symbol("XAUUSD", "BLACKBULL")
+from tvDatafeed import search_symbol
+
+search_symbol("gold")                       # بحث عام
+search_symbol("أرامكو")                     # نص عربي — يعمل مباشرة
+search_symbol("XAUUSD", "BLACKBULL")        # بحث داخل بورصة محددة: المعامل الثاني exchange
+```
+
+كطريقة على كائن `TvDatafeed` (ترث إعدادات الوكيل `proxies` تلقائياً):
+
+```python
+from tvDatafeed import TvDatafeed
+tv = TvDatafeed()                    # بدون بيانات دخول — nologin
+tv.search_symbol("gold")
+```
+
+#### التوقيع الكامل
+
+```python
+search_symbol(
+    text: str,             # اسم الرمز أو وصفه (عربي أو إنجليزي)
+    exchange: str = "",    # معرف البورصة (مثل "BLACKBULL" أو "TADAWUL") — اختياري
+    type: str = None,      # نوع الأصل — عربي أو إنجليزي (الجدول أدناه)
+    country: str = None,   # الدولة: رمز ISO-2 أو اسم عربي/إنجليزي — اختياري
+    limit: int = 50,       # عدد النتائج (1..50، والـ 50 حدّ الخادم الأقصى)
+    lang: str = "en",      # لغة الواجهة المطلوبة من TradingView
+    timeout: float = 10,   # مهلة الطلب بالثواني
+    proxies: dict = None,  # وكيل اختياري {"https": "http://..."}
+    extra: dict = None,    # معاملات إضافية تُمرَّر للخادم كما هي (تخصيص)
+) -> list[dict]
+```
+
+> ملاحظة الحالة: `exchange` حساس لحالة الأحرف لدى الخادم، وتُعاد المحاولة تلقائياً بحروف كبيرة إذا كانت النتيجة فارغة.
+
+#### الفلترة بالنوع `type`
+
+| القيمة (إنجليزي) | مرادفات عربية مقبولة | الوصف |
+|---|---|---|
+| `"commodity"` | `"السلع"`، `"سلع"` | السلع (ذهب، نفط، غاز...) — تُسترجَع عبر شاشة CFD ثم تُفلتِر داخلياً على النوع `commodity` |
+| `"bond"` | `"السندات"`، `"سندات"` | السندات |
+| `"forex"` | `"الفوريكس"`، `"فوركس"`، `"عملات"` | سوق الصرف الأجنبي |
+| `"stock"` | `"الأسهم"`، `"أسهم"` | الأسهم وشهادات الإيداع (`stock` / `dr`) |
+| `"index"` | `"المؤشرات"`، `"مؤشرات"` | المؤشرات |
+| `"crypto"` | `"العملات الرقمية"`، `"كريبتو"`، `"الرقمية"` | العملات الرقمية |
+| `"futures"` | `"العقود الآجلة"` | العقود الآجلة |
+| `"etf"` | `"صناديق مؤشرات"` | صناديق المؤشرات |
+| `"fund"` | `"الصناديق"`، `"صناديق"` | الصناديق |
+| `"cfd"` | `"عقود الفروقات"`، `"فروقات"` | عقود الفروقات |
+| `"option"` | `"الخيارات"` | الخيارات |
+| `"warrant"` | `"الشهادات"`، `"شهادات"` | الشهادات/الأسهم الواردة |
+
+المطابقة غير حساسة لحالة الأحرف. أي قيمة غير معروفة ترمي `ValueError` فوراً مع سرد الأنواع الصالحة.
+
+#### الفلترة بالدولة `country`
+
+تقبل رمز ISO-3166 alpha-2 (مثل `"SA"` أو `"US"`) أو اسماً بالعربية/الإنجليزية من قاعدة مرادفات تغطي الأسواق الرئيسية والدول العربية:
+
+```python
+search_symbol("bank", country="السعودية")          # → country=SA — كل النتائج TADAWUL
+search_symbol("أرامكو", country="SA")               # نص عربي كامل يعمل + رمز الدولة
+search_symbol("bank", country="السعودية", type="الأسهم")
+```
+
+> **الدولة اختيارية بطبيعتها**: السلع والفوريكس والعملات الرقمية لا تحمل دولة في بيانات TradingView، لذا يُعرض `country=None` — المفتاح موجود دائماً في النتيجة لكن قيمته قد تكون `None`، ولا يحدث أي خطأ.
+
+#### بنية الناتج
+
+عنصر نموذجي من القائمة المعادة:
+
+```python
+{
+    "symbol": "XAUUSD",
+    "full_name": "BLACKBULL:XAUUSD",   # جاهزة للإرسال إلى get_hist (الصيغة EXCHANGE:SYMBOL)
+    "description": "Gold",
+    "exchange": "BlackBull Markets",   # الاسم المعروض لدى TradingView
+    "exchange_id": "BLACKBULL",        # ★ المعرف الحقيقي المطلوب في get_hist
+    "type": "commodity",
+    "country": None,                   # None للسلع/الفوريكس/... (المفتاح موجود دائماً)
+    "currency_code": "USD",
+    "typespecs": ["cfd"],              # قائمة دائماً ([] إن لم توجد)
+    "provider_id": "blackbullmarkets",
+    # ... أي حقول إضافية ترجعها TradingView تبقى كما هي (logoid, isin, ...)
+}
+```
+
+> `TradingView` ترجع حقلاً اسمه `exchange` هو الاسم المعروض (مثل `"BlackBull Markets"`)، بينما `source_id` هو المعرّف الحقيقي (`"BLACKBULL"`). نضيف لك **`exchange_id`** وتَبني **`full_name`** من المعرّف ليكون جاهزاً للاستهلاك، فتمرير القيم إلى `get_hist` يكون مباشراً:
+
+```python
+hit = next(r for r in search_symbol("XAUUSD", "BLACKBULL") if r["full_name"] == "BLACKBULL:XAUUSD")
+df = tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"], n_bars=100)
+```
+
+#### الأخطاء
+
+| الحالة | النتيجة |
+|---|---|
+| معامل غير صالح (`type`/`country`/`text` فارغ/`limit` ≤ 0 ...) | `ValueError` فوري مع رسالة توضيحية |
+| انقطاع شبكة / HTTP غير 200 / استجابة غير JSON | قائمة فارغة `[]` + رسالة في اللوج — لا يُرمى استثناء |
+| قيمة `type` مثل `"commodity"` غير مدعومة من الخادم | تُعالَج تلقائياً عبر شاشة CFD مع فلترة محلية |
+| `exchange` بحالة خاطئة (`blackbull` بدل `BLACKBULL`) | إعادة محاولة تلقائية بحروف كبيرة |
+
+> **403 / الشبكات المحجوبة (Colab/notebooks):** إذا كنت داخل بيئة سحابية محجوب IP فيها، مرّر وكيلاً (`proxies=`) أو استخدم `TvDatafeed(proxies={...})`. وإذا كان IP بيئتك متاحاً (محلياً) لا تحتاج أي شيء — الفلترة لا تتطلب دخولاً.
+
+#### أمثلة عملية كاملة
+
+```python
+from tvDatafeed import search_symbol, TvDatafeed, Interval
+
+tv = TvDatafeed()
+
+# 1) كل رموز أرامكو السعودية (نص عربي + دولة)
+aramco = search_symbol("أرامكو", country="السعودية")
+print([r["full_name"] for r in aramco])          # ['TADAWUL:2222', ...]
+
+# 2) السلع فقط — ذهب ونفط
+gold = search_symbol("gold", type="السلع", limit=10)
+oil  = search_symbol("oil",  type="commodity", limit=10)
+print(all(r["type"] == "commodity" for r in gold + oil))   # True
+
+# 3) السندات والفوريكس
+print(len(search_symbol("apple",  type="bond")))            # > 0
+print(len(search_symbol("EURUSD", type="الفوريكس")))        # > 0
+
+# 4) تحميل بيانات لأول نتيجة بحث
+hit = search_symbol("XAUUSD", "BLACKBULL")[0]
+df = tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"],
+                 interval=Interval.in_daily, n_bars=50, timezone="UTC")
+print(df.tail(3))
 ```
 
 ---
@@ -177,7 +304,14 @@ pip install pytest
 pytest tests -v
 ```
 
-كل الاختبارات محلية (بدون إنترنت) وتستخدم حمولة حقيقية ملتقطة من TradingView.
+كل الاختبارات محلية (بدون إنترنت) وتستخدم حمولة حقيقية ملتقطة من TradingView. تشمل:
+- اختبارات `search_symbol` الكاملة (مرادفات الأنواع والدول، بناء الطلب، مسارات الأخطاء، `ValueError` مقابل `[]`).
+
+اختبارات **حية** (اختيارية) تتحقق من صحة البيانات الفعلية من TradingView بدون تسجيل دخول:
+
+```bash
+TV_LIVE=1 pytest tests/test_search_live.py -v
+```
 
 ---
 

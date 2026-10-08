@@ -24,3 +24,8 @@ Source = "https://github.com/ayoubajermoune/tvdatafeed-timezone-fix"
 
 [tool.setuptools]
 packages = ["tvDatafeed"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: hits the real TradingView API (opt-in with TV_LIVE=1)",
+]

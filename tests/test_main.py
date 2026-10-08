@@ -158,8 +158,12 @@ def test_index_name_is_datetime():
 
 # ---------------------------------------------------------------------------
 # 4) search_symbol() never raises, returns parsed data or an empty list
+# (the implementation itself lives in tvDatafeed.search -- see
+#  tests/test_search_symbol.py for its dedicated suite)
 # ---------------------------------------------------------------------------
 from unittest import mock
+
+PATCH_SEARCH = "tvDatafeed.search.requests.get"
 
 
 def _tv(proxies=None):
@@ -169,10 +173,14 @@ def _tv(proxies=None):
     return tv
 
 
-def _resp(status_code, text, exc=None):
+def _resp(status_code, text=None, exc=None, payload=None, json_exc=None):
     r = mock.Mock()
     r.status_code = status_code
     r.text = text
+    if json_exc is not None:
+        r.json.side_effect = json_exc
+    else:
+        r.json.return_value = payload
     if exc is not None:
         r.raise_for_status.side_effect = exc
     else:
@@ -182,45 +190,59 @@ def _resp(status_code, text, exc=None):
 
 def test_search_symbol_parses_valid_json():
     tv = _tv()
-    payload = (
-        '[{"symbol":"XAUUSD","exchange":"BLACKBULL",'
-        '"description":"Gold/US Dollar","type":"commodity"}]'
-    )
-    with mock.patch("tvDatafeed.main.requests.get", return_value=_resp(200, payload)) as get:
-        out = tv.search_symbol("XAUUSD", "BLACKBULL")
-    get.assert_called_once()
-    assert get.call_args[1]["timeout"] == 10  # request is bounded
-    assert out == [
+    payload = [
         {"symbol": "XAUUSD", "exchange": "BLACKBULL",
          "description": "Gold/US Dollar", "type": "commodity"}
+    ]
+    with mock.patch(PATCH_SEARCH, return_value=_resp(200, payload=payload)) as get:
+        out = tv.search_symbol("XAUUSD", "BLACKBULL")
+    get.assert_called_once()
+    kwargs = get.call_args[1]
+    assert kwargs["timeout"] == 10  # request is bounded
+    assert kwargs["headers"]["Origin"] == "https://www.tradingview.com"  # no 403
+    assert kwargs["params"]["text"] == "XAUUSD"
+    assert kwargs["params"]["exchange"] == "BLACKBULL"
+    assert out == [
+        {
+            "symbol": "XAUUSD",
+            "full_name": "BLACKBULL:XAUUSD",
+            "description": "Gold/US Dollar",
+            "exchange": "BLACKBULL",
+            "exchange_id": "BLACKBULL",
+            "type": "commodity",
+            "country": None,
+            "currency_code": None,
+            "typespecs": [],
+            "provider_id": None,
+        }
     ]
 
 
 def test_search_symbol_returns_empty_list_on_http_error():
     tv = _tv()
-    bad = _resp(403, "<html>403 Forbidden</html>",
+    bad = _resp(403, text="<html>403 Forbidden</html>",
                 exc=__import__("requests").exceptions.HTTPError("403"))
-    with mock.patch("tvDatafeed.main.requests.get", return_value=bad):
+    with mock.patch(PATCH_SEARCH, return_value=bad):
         assert tv.search_symbol("gold") == []
 
 
 def test_search_symbol_returns_empty_list_on_non_json_body():
     tv = _tv()
-    with mock.patch("tvDatafeed.main.requests.get",
-                    return_value=_resp(200, "")):
+    with mock.patch(PATCH_SEARCH,
+                    return_value=_resp(200, json_exc=ValueError("not json"))):
         assert tv.search_symbol("gold") == []
 
 
 def test_search_symbol_returns_empty_list_on_connection_error():
     tv = _tv()
-    with mock.patch("tvDatafeed.main.requests.get",
+    with mock.patch(PATCH_SEARCH,
                     side_effect=__import__("requests").exceptions.ConnectionError("boom")):
         assert tv.search_symbol("gold") == []
 
 
 def test_search_symbol_sends_user_agent_and_proxies():
     tv = _tv(proxies={"https": "http://proxy.example:8080"})
-    with mock.patch("tvDatafeed.main.requests.get", return_value=_resp(200, "[]")) as get:
+    with mock.patch(PATCH_SEARCH, return_value=_resp(200, payload=[])) as get:
         tv.search_symbol("gold")
     kwargs = get.call_args[1]
     assert kwargs["timeout"] == 10

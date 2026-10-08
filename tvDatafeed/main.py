@@ -11,6 +11,13 @@ from websocket import create_connection
 
 import requests
 
+try:
+    from .search import USER_AGENT as _USER_AGENT
+    from .search import search_symbol as _module_search_symbol
+except ImportError:  # pragma: no cover - running ``python tvDatafeed/main.py``
+    from search import USER_AGENT as _USER_AGENT
+    from search import search_symbol as _module_search_symbol
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,13 +39,9 @@ class Interval(enum.Enum):
 
 class TvDatafeed:
     __sign_in_url = 'https://www.tradingview.com/accounts/signin/'
-    __search_url = 'https://symbol-search.tradingview.com/symbol_search/?text={}&hl=1&exchange={}&lang=en&type=&domain=production'
     __ws_headers = json.dumps({"Origin": "https://data.tradingview.com"})
     __signin_headers = {'Referer': 'https://www.tradingview.com'}
-    __user_agent = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-    )
+    __user_agent = _USER_AGENT
     __ws_timeout = 5
 
     def __init__(
@@ -433,23 +436,52 @@ class TvDatafeed:
             exchange_tz=self.__extract_exchange_timezone(raw_data),
         )
 
-    def search_symbol(self, text: str, exchange: str = ''):
-        url = self.__search_url.format(text, exchange)
-        symbols_list = []
-        try:
-            resp = requests.get(
-                url,
-                timeout=10,
-                headers={"User-Agent": self.__user_agent},
-                proxies=self.proxies,
-            )
-            resp.raise_for_status()
-            symbols_list = json.loads(resp.text.replace(
-                '</em>', '').replace('<em>', ''))
-        except Exception as e:
-            logger.error(f"error while searching symbol {text!r}: {e}")
+    def search_symbol(
+        self,
+        text: str,
+        exchange: str = "",
+        type: str = None,
+        country: str = None,
+        limit: int = 50,
+        lang: str = "en",
+        timeout: float = 10,
+        extra: dict = None,
+    ):
+        """Search TradingView symbols (no login required).
 
-        return symbols_list
+        Thin wrapper around :func:`tvDatafeed.search.search_symbol` that
+        reuses this client's ``proxies``.  See the module level function
+        for the full description of the arguments and the return value.
+
+        Args:
+            text: symbol name or description.
+            exchange: optional exchange id, e.g. ``"BLACKBULL"``.
+            type: optional asset type in English or Arabic
+                (``"السلع"``, ``"السندات"``, ``"الفوريكس"``, ``"stock"``...).
+            country: optional ISO-3166 alpha-2 code or country name
+                (``"السعودية"``, ``"US"``...).
+            limit: maximum number of records (1..50).
+            lang: TradingView interface language.
+            timeout: per-request timeout in seconds.
+            extra: optional extra query parameters forwarded verbatim.
+
+        Returns:
+            list[dict]: normalised records (``[]`` on network failure).
+
+        Raises:
+            ValueError: if any argument is invalid.
+        """
+        return _module_search_symbol(
+            text,
+            exchange=exchange,
+            type=type,
+            country=country,
+            limit=limit,
+            lang=lang,
+            timeout=timeout,
+            proxies=getattr(self, "proxies", None),
+            extra=extra,
+        )
 
 
 if __name__ == "__main__":

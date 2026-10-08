@@ -108,74 +108,76 @@ data = tv.get_hist(..., align_daily_to_trading_day=False)
 
 مثال عملي كامل في `examples/example_usage.py`.
 
-### البحث عن الرمز — `search_symbol(text, exchange='')`
+### البحث عن الرمز — `search_symbol(...)` (بدون تسجيل دخول)
 
-قبل تحميل البيانات، يمكنك التحقق من صحة الرمز والبحث عنه على TradingView:
+بحث في TradingView عن الرموز بالاسم/الوصف مع فلترة اختيارية **بالنوع** (السلع، السندات، الفوريكس، الأسهم، ...) و**بالدولة**، **دون الحاجة إلى حساب أو إنشاء كائن**:
 
 ```python
-from tvDatafeed import TvDatafeed
+from tvDatafeed import search_symbol
 
-tv = TvDatafeed()
-
-# 1) بحث عام
-results = tv.search_symbol("gold")
-
-# 2) بحث داخل بورصة محددة (أنصح به — أسرع وأدق)
-results = tv.search_symbol("XAUUSD", "BLACKBULL")
+search_symbol("gold")                            # بحث عام
+search_symbol("أرامكو")                          # نص عربي
+search_symbol("XAUUSD", "BLACKBULL")             # داخل بورصة محددة
+search_symbol("gold", type="السلع")              # سلع فقط (مرادفات عربية/إنجليزية)
+search_symbol("bank", country="السعودية")        # بنوك السوق السعودي
+search_symbol("EURUSD", type="الفوريكس")         # فوريكس فقط
 ```
+
+توجد أيضاً كطريقة على الكائن لتوريث الوكيل: `tv.search_symbol("XAUUSD", "BLACKBULL")`.
 
 **المعاملات:**
 
 | المعامل | النوع | الافتراضي | الوصف |
 |---|---|---|---|
-| `text` | `str` | — | نص البحث (اسم الرمز أو وصفه) |
-| `exchange` | `str` | `""` | تقييد البحث ببورصة معينة |
+| `text` | `str` | — | نص البحث (اسم الرمز أو وصفه — عربي أو إنجليزي) |
+| `exchange` | `str` | `""` | معرف البورصة (مثل `BLACKBULL`، `TADAWUL`) |
+| `type` | `str` | `None` | نوع الأصل: `commodity/السلع`، `bond/السندات`، `forex/الفوريكس`، `stock/الأسهم`، `index/المؤشرات`، `crypto/العملات الرقمية`، `futures/العقود الآجلة`، `etf`، `fund/الصناديق`، `cfd/عقود الفروقات`، `option/الخيارات`، `warrant/الشهادات` |
+| `country` | `str` | `None` | رمز ISO-2 أو اسم (عربي/إنجليزي) مثل `"السعودية"` أو `"US"` |
+| `limit` | `int` | `50` | عدد النتائج (الحد الأقصى للخادم 50) |
+| `lang` | `str` | `"en"` | لغة الواجهة المطلوبة |
+| `timeout` | `float` | `10` | مهلة الطلب بالثواني |
+| `proxies` | `dict` | `None` | وكيل اختياري (أو عبر منشئ `TvDatafeed`) |
+| `extra` | `dict` | `None` | معاملات إضافية تُمرَّر للخادم كما هي (تخصيص مستقبلي) |
 
-**الناتج:** قائمة من القواميس، مثال على عنصر واحد:
-
-```python
-[
-    {
-        "symbol": "XAUUSD",
-        "exchange": "BLACKBULL",
-        "description": "Gold/US Dollar",
-        "type": "commodity",
-        ...
-    },
-    ...
-]
-```
-
-> **ملاحظة:** الرمز يُرسل إلى `get_hist` بالصيغة `EXCHANGE:SYMBOL` (مثل `BLACKBULL:XAUUSD`) —
-> تحقق أولاً من `symbol` و `exchange` في نتائج البحث قبل التحميل، وارمِ `ValueError` إذا لم يظهر
-> الرمز المطلوب (نفس ما تفعله `TvDatafeedLive.new_seis` داخلياً).
->
-> **عند الفشل:** إذا تعذّر الاتصال بخدمة البحث (انقطاع شبكة، استجابة غير صالحة، أو 403)
-> تُرجَع قائمة فارغة `[]` مع رسالة خطأ في اللوج — **لا يُرمى أي استثناء**. فتأكد دائماً من
-> فحص الناتج قبل الافتراض أن الرمز غير موجود.
-
-> **403 / الشبكات المحجوبة (Colab / notebooks سحابية):** إذا ظهر `403 Client Error`
-> أو `[]` بشكل دائم، فغالباً عنوان IP لبيئتك محجوب لدى TradingView. تمرير **وكيل** خاص بك
-> عبر منشئ الكائن (`proxies`) يوجّه كل طلبات REST (البحث والدخول) من خلاله:
->
-> ```python
-> tv = TvDatafeed(proxies={"http": "http://user:pass@proxy:8080",
->                          "https": "http://user:pass@proxy:8080"})
-> results = tv.search_symbol("XAUUSD", "BLACKBULL")
-> ```
->
-> يُستخدم أيضاً `User-Agent` متصفح واقعي تلقائياً في كل الطلبات. جرّب أولاً من جهازك المحلي
-> (عنوان IP منزلي عادة غير محجوب) قبل إعداد الوكيل.
-
-استخدام عملي:
+**الناتج:** قائمة قواميس دائمة البنية:
 
 ```python
-matches = tv.search_symbol("XAUUSD", "BLACKBULL")
-if not any(m["symbol"] == "XAUUSD" and m["exchange"] == "BLACKBULL" for m in matches):
-    raise ValueError("الرمز غير موجود في هذه البورصة")
-
-data = tv.get_hist(symbol="XAUUSD", exchange="BLACKBULL", n_bars=10)
+{
+    "symbol": "XAUUSD",
+    "full_name": "BLACKBULL:XAUUSD",   # جاهزة للإرسال إلى get_hist
+    "description": "Gold",
+    "exchange": "BlackBull Markets",   # الاسم المعروض
+    "exchange_id": "BLACKBULL",        # ★ المعرّف الحقيقي المطلوب في get_hist
+    "type": "commodity",
+    "country": None,                   # السلع/الفوريكس لا تحمل دولة → None دائماً بدون خطأ
+    "currency_code": "USD",
+    "typespecs": ["cfd"],
+    "provider_id": "blackbullmarkets",
+    # ... + أي حقول إضافية من TradingView
+}
 ```
+
+استعمال عملي:
+
+```python
+from tvDatafeed import search_symbol, TvDatafeed
+
+tv = TvDatafeed()
+matches = search_symbol("bank", country="السعودية", type="الأسهم")
+if not matches:
+    raise ValueError("لا توجد نتائج مطابقة")
+
+hit = matches[0]
+data = tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"], n_bars=10)
+```
+
+> **المعاملات الخاطئة** (`type` غير معروف، `country="XYZ"`، `text` فارغ، `limit=0`) ترمي `ValueError` فوراً برسالة توضيحية. **أعطال الشبكة فقط** تعيد `[]` مع رسالة في اللوج — فلا تخلط بينهما.
+>
+> **بدون تسجيل دخول:** الخدمة لا تتطلب مصادقة إطلاقاً؛ كل ما تحتاجه هو هيدر `Origin` الذي تُرسله المكتبة تلقائياً (أصل عطل `403`).
+>
+> **403 / الشبكات المحجوبة (Colab/notebooks):** مرّر وكيلاً: `tv = TvDatafeed(proxies={...})` أو `search_symbol(..., proxies={...})`.
+
+التفاصيل الكاملة (جداول المرادفات العربية لكل الأنواع والدول، بنية الأخطاء، أمثلة) في [`docs/USAGE.md`](docs/USAGE.md) وقسم 5 من [`examples/example_usage.py`](examples/example_usage.py).
 
 ### كيف أعرف المنطقة الزمنية للبيانات؟
 
@@ -206,6 +208,13 @@ pytest tests -v
 - عدم تغيير الشموع داخلية
 - سلامة قيم OHLCV
 - رفض مناطق الزمن غير الصحيحة قبل فتح أي اتصال
+- **`search_symbol`**: بناء المعاملات/الهيدرز، مرادفات الأنواع والدول، فلترة السلع، `exchange_id`/`full_name`، `ValueError` للمعاملات الخاطئة، `[]` لأعطال الشبكة، و`TvDatafeedLive.new_seis`
+
+**اختبارات حية (اختيارية)** تتصل بـ TradingView فعلياً وتراجع صحة البيانات (بحث بالنوع/الدولة، نص عربي، تنزيل رمز مُرجَع عبر `get_hist`):
+
+```bash
+TV_LIVE=1 pytest tests/test_search_live.py -v
+```
 
 ---
 
@@ -231,7 +240,7 @@ This fork fixes both:
 
 - **`get_hist(..., timezone=)`** — `"UTC"` (default, tz-aware), any IANA name (`"Africa/Cairo"`, `"Asia/Riyadh"`, ...), or `"exchange"` (naive, exchange clock). The index is always tz-aware / deterministic: `data.index.tz` tells you exactly what you are looking at.
 - **`get_hist(..., align_daily_to_trading_day=True)`** — daily bars that open at/after 12:00 local time span midnight, so they are dated by their **closing (trading) day**. The last bar is now dated *today*.
-- **`search_symbol(text, exchange='')`** — validate and look up a symbol on TradingView before downloading data (returns a list of dicts with `symbol`, `exchange`, `description`, ...).
+- **`search_symbol(text, exchange='', type=None, country=None, ...)`** — look up symbols **without any login** (also exposed as a module-level standalone `search_symbol`) with optional filters by asset type (`commodity/سلع`, `bond/سندات`, `forex/فوريكس`, ...) and country (ISO-2 or Arabic/English names). Returns normalised dicts with `full_name`, `exchange_id`, `country` (`None` for commodities/forex), `currency_code`, `typespecs`. Invalid arguments raise `ValueError`; network failures return `[]`.
 
 OHLCV values are untouched; only the datetime column and timezone semantics changed. Offline test suite included (`pytest tests`).
 
