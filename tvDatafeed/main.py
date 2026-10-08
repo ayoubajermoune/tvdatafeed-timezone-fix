@@ -422,13 +422,14 @@ class TvDatafeed:
 
     def search_symbol(self, text: str, exchange: str = ''):
         url = self.__search_url.format(text, exchange)
+        symbols_list = []
         try:
-            resp = requests.get(url)
-
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
             symbols_list = json.loads(resp.text.replace(
                 '</em>', '').replace('<em>', ''))
         except Exception as e:
-            logger.error(e)
+            logger.error(f"error while searching symbol {text!r}: {e}")
 
         return symbols_list
 

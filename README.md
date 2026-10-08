@@ -149,6 +149,10 @@ results = tv.search_symbol("XAUUSD", "BLACKBULL")
 > **ملاحظة:** الرمز يُرسل إلى `get_hist` بالصيغة `EXCHANGE:SYMBOL` (مثل `BLACKBULL:XAUUSD`) —
 > تحقق أولاً من `symbol` و `exchange` في نتائج البحث قبل التحميل، وارمِ `ValueError` إذا لم يظهر
 > الرمز المطلوب (نفس ما تفعله `TvDatafeedLive.new_seis` داخلياً).
+>
+> **عند الفشل:** إذا تعذّر الاتصال بخدمة البحث (انقطاع شبكة، استجابة غير صالحة، أو 403)
+> تُرجَع قائمة فارغة `[]` مع رسالة خطأ في اللوج — **لا يُرمى أي استثناء**. فتأكد دائماً من
+> فحص الناتج قبل الافتراض أن الرمز غير موجود.
 
 استخدام عملي:
 
@@ -223,3 +227,4 @@ OHLCV values are untouched; only the datetime column and timezone semantics chan
 ## الرخصة (License)
 
 MIT — نفس رخصة المستودع الأصلي / Same license as upstream.
+

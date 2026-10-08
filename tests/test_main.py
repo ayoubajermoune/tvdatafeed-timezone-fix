@@ -154,3 +154,64 @@ def test_index_name_is_datetime():
     df = parse()
     assert df.index.name == "datetime"
     assert list(df.reset_index().columns)[0] == "datetime"
+
+
+# ---------------------------------------------------------------------------
+# 4) search_symbol() never raises, returns parsed data or an empty list
+# ---------------------------------------------------------------------------
+from unittest import mock
+
+
+def _tv():
+    # build a TvDatafeed without touching the network (skip __init__)
+    return TvDatafeed.__new__(TvDatafeed)
+
+
+def _resp(status_code, text, exc=None):
+    r = mock.Mock()
+    r.status_code = status_code
+    r.text = text
+    if exc is not None:
+        r.raise_for_status.side_effect = exc
+    else:
+        r.raise_for_status.return_value = None
+    return r
+
+
+def test_search_symbol_parses_valid_json():
+    tv = _tv()
+    payload = (
+        '[{"symbol":"XAUUSD","exchange":"BLACKBULL",'
+        '"description":"Gold/US Dollar","type":"commodity"}]'
+    )
+    with mock.patch("tvDatafeed.main.requests.get", return_value=_resp(200, payload)) as get:
+        out = tv.search_symbol("XAUUSD", "BLACKBULL")
+    get.assert_called_once()
+    assert get.call_args[1]["timeout"] == 10  # request is bounded
+    assert out == [
+        {"symbol": "XAUUSD", "exchange": "BLACKBULL",
+         "description": "Gold/US Dollar", "type": "commodity"}
+    ]
+
+
+def test_search_symbol_returns_empty_list_on_http_error():
+    tv = _tv()
+    bad = _resp(403, "<html>403 Forbidden</html>",
+                exc=__import__("requests").exceptions.HTTPError("403"))
+    with mock.patch("tvDatafeed.main.requests.get", return_value=bad):
+        assert tv.search_symbol("gold") == []
+
+
+def test_search_symbol_returns_empty_list_on_non_json_body():
+    tv = _tv()
+    with mock.patch("tvDatafeed.main.requests.get",
+                    return_value=_resp(200, "")):
+        assert tv.search_symbol("gold") == []
+
+
+def test_search_symbol_returns_empty_list_on_connection_error():
+    tv = _tv()
+    with mock.patch("tvDatafeed.main.requests.get",
+                    side_effect=__import__("requests").exceptions.ConnectionError("boom")):
+        assert tv.search_symbol("gold") == []
+
