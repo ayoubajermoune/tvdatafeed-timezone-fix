@@ -79,3 +79,44 @@ print("أرامكو ->", hit["full_name"], hit["description"], hit["country"])
 print("=> تمرير المعرّفات الجاهزة إلى get_hist:")
 print(tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"],
                   interval=Interval.in_daily, n_bars=5).tail(2))
+
+print("\n" + "=" * 70)
+print("6) البحث في العقود الآجلة — دولة + بورصة + تصنيف + تصنيف فرعي")
+print("   Futures search -- country + exchange + category + sub-category")
+print("=" * 70)
+from tvDatafeed import list_futures_categories, search_futures
+
+# 6.1) التصنيفات العشرة المتاحة (عربي/إنجليزي) ومصدرها في TradingView
+for cat in list_futures_categories():
+    print(f"   {cat['id']:<18} {cat['product']:<32} {cat['label']}")
+
+# 6.2) استعراض تصنيف كامل في بورصة محددة (عقود مستمرة فقط — الافتراضي)
+energy = search_futures(category="الطاقة", exchange="NYMEX", limit=5)
+print("NYMEX energy (continuous):", [(r["symbol"], r["product"]) for r in energy])
+
+# 6.3) الدولة + التصنيف معاً (يمرّ عبر بحث الرموز ثم يُصنَّف)
+mcx_metals = search_futures(country="الهند", category="المعادن", limit=5)
+print("India metals:", [(r["full_name"], r["category"]) for r in mcx_metals])
+
+# 6.4) التصنيف الفرعي (مطابقة بالبداية: كل ما تحت المسار)
+gold_only = search_futures(product="Commodity/Metals/Precious/Gold", limit=5)
+print("gold only:", [(r["full_name"], r["product"]) for r in gold_only])
+
+# 6.5) كل عقود الشهر لا المستمرة فقط
+months = search_futures(category="الطقس", continuous_only=False, limit=5)
+print("weather months:", [(r["symbol"], r["continuous"]) for r in months])
+
+# 6.6) نص + تصنيف: يُرجع الجذر + العقد المستمر، ثم التحميل
+hits = search_futures("crude oil", category="energy", limit=5)
+cl = next((r for r in hits if r["full_name"] == "NYMEX:CL"), None)
+if cl:
+    print("CL ->", cl["full_name"], cl["category"], cl["continuous_symbol"])
+    print(tv.get_hist(symbol=cl["symbol"], exchange=cl["exchange_id"],
+                      fut_contract=1, interval=Interval.in_daily,
+                      n_bars=5).tail(2))
+
+# 6.7) المعاملات الخاطئة ترمي ValueError فوراً (أعطال الشبكة فقط تعيد [])
+try:
+    search_futures(category="crypto futures")
+except ValueError as exc:
+    print("ValueError ->", str(exc)[:70], "...")

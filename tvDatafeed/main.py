@@ -14,9 +14,11 @@ import requests
 try:
     from .search import USER_AGENT as _USER_AGENT
     from .search import search_symbol as _module_search_symbol
+    from .futures import search_futures as _module_search_futures
 except ImportError:  # pragma: no cover - running ``python tvDatafeed/main.py``
     from search import USER_AGENT as _USER_AGENT
     from search import search_symbol as _module_search_symbol
+    from futures import search_futures as _module_search_futures
 
 logger = logging.getLogger(__name__)
 
@@ -481,6 +483,56 @@ class TvDatafeed:
             timeout=timeout,
             proxies=getattr(self, "proxies", None),
             extra=extra,
+        )
+
+    def search_futures(
+        self,
+        text: str = "",
+        exchange: str = None,
+        category: str = None,
+        product: str = None,
+        country: str = None,
+        limit: int = 50,
+        continuous_only: bool = True,
+        lang: str = "en",
+        timeout: float = 10,
+    ):
+        """Search **futures contracts** by country, exchange and category.
+
+        Thin wrapper around :func:`tvDatafeed.futures.search_futures` that
+        reuses this client's ``proxies``.  See the module level function for
+        the full description of the arguments and the return value.
+
+        Args:
+            text: optional search text (symbol or description).
+            exchange: optional exchange id, e.g. ``"NYMEX"``.
+            category: optional futures category in English or Arabic
+                (``"الطاقة"``, ``"metals"``, ``"weather"``...).
+            product: optional sub-category path, e.g.
+                ``"Commodity/Metals/Precious/Gold"``.
+            country: optional ISO-3166 alpha-2 code or country name.
+            limit: maximum number of records (1..50).
+            continuous_only: browse continuous contracts only.
+            lang: TradingView interface language.
+            timeout: per-request timeout in seconds.
+
+        Returns:
+            list[dict]: normalised records (``[]`` on network failure).
+
+        Raises:
+            ValueError: if any argument is invalid.
+        """
+        return _module_search_futures(
+            text,
+            exchange=exchange,
+            category=category,
+            product=product,
+            country=country,
+            limit=limit,
+            continuous_only=continuous_only,
+            lang=lang,
+            timeout=timeout,
+            proxies=getattr(self, "proxies", None),
         )
 
 

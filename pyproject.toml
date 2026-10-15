@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tvdatafeed"
-version = "2.2.0"
+version = "2.3.0"
 description = "TradingView historical data downloader (timezone-safe fork)"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -12,7 +12,7 @@ license = { text = "MIT License" }
 authors = [
     { name = "@StreamAlpha" },
 ]
-keywords = ["tradingview", "ohlc", "candles", "market-data", "finance"]
+keywords = ["tradingview", "ohlc", "candles", "market-data", "finance", "futures", "search"]
 dependencies = [
     "pandas>=1.3",
     "websocket-client>=0.57",

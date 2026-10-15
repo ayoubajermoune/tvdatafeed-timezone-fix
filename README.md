@@ -179,6 +179,88 @@ data = tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"], n_bars=10)
 
 التفاصيل الكاملة (جداول المرادفات العربية لكل الأنواع والدول، بنية الأخطاء، أمثلة) في [`docs/USAGE.md`](docs/USAGE.md) وقسم 5 من [`examples/example_usage.py`](examples/example_usage.py).
 
+### البحث عن العقود الآجلة — `search_futures(...)` (بدون تسجيل دخول)
+
+بحث مخصّص في **العقود الآجلة (Futures)** حسب **الدولة + البورصة + التصنيف + التصنيف الفرعي**، **دون حساب أو إنشاء كائن**. يعتمد على مجمّع TradingView للعقود الآجلة (`scanner.tradingview.com/futures/scan`) الذي يوفّر عمود `product` الهرمي — وهو المصدر الرسمي للتصنيف — إضافةً إلى بحث الرموز نفسه عند الفلترة بالدولة:
+
+```python
+from tvDatafeed import search_futures, list_futures_categories
+
+list_futures_categories()                        # التصنيفات العشرة (أسماء عربية/إنجليزية + التصنيف الفرعي)
+search_futures(category="الطاقة", exchange="NYMEX")   # الطاقة في بورصة نيويورك (عقود مستمرة)
+search_futures(category="المعادن", limit=10)          # كل معادن العالم
+search_futures(country="الهند", category="metals")     # ★ الدولة + التصنيف معاً
+search_futures("crude oil", category="energy")         # نص + تصنيف (يُرجع الجذر + العقد المستمر)
+search_futures(product="Commodity/Metals/Precious")    # ★ التصنيف الفرعي (كل ما تحته)
+search_futures(category="الطقس", continuous_only=False) # كل عقود الشهر لا المستمرة فقط
+```
+
+**التصنيفات العشرة** (`category`):
+
+| التصنيف | مرادفات عربية/إنجليزية | تصنيف TradingView (`product`) |
+|---|---|---|
+| `single_stock` | الأسهم الفردية / single stock | `Financial/Equity` |
+| `world_indices` | المؤشرات العالمية / world indices | `Financial/Index` |
+| `currencies` | العملات / forex / currencies | `Financial/Currency` |
+| `interest_rates` | أسعار الفائدة / interest rates | `Financial/InterestRate` |
+| `energy` | الطاقة / النفط / energy | `Commodity/Energy...` |
+| `agriculture` | الزراعة / agriculture | `Commodity/Agriculture...` |
+| `metals` | المعادن / metals | `Commodity/Metals...` |
+| `weather` | الطقس / weather | `Commodity/Weather` |
+| `building_materials` | مواد البناء / building materials | `Commodity/BuildingMaterials` |
+| `chemicals` | المواد الكيميائية / chemicals | `Commodity/Chemicals` |
+
+**المعاملات:**
+
+| المعامل | النوع | الافتراضي | الوصف |
+|---|---|---|---|
+| `text` | `str` | `""` | نص بحث اختياري؛ فارغ يعني «استعراض» حسابات أخرى فقط |
+| `exchange` | `str` | `None` | معرف البورصة (مثل `NYMEX`، `CME`، `EUREX`) — دقيق مع إعادة محاولة تلقائية بالأحرف الكبيرة |
+| `category` | `str` | `None` | أحد التصنيفات العشرة أعلاه (عربي أو إنجليزي) |
+| `product` | `str` | `None` | التصنيف الفرعي من هرمية TradingView، مثل `Commodity/Metals/Precious/Gold` (مطابقة بالبداية: كل ما تحته) |
+| `country` | `str` | `None` | رمز ISO-2 أو اسم (عربي/إنجليزي) مثل `"الهند"` أو `"IN"` — يمرّ عبر بحث الرموز لأن المجمّع لا يحمل الدولة |
+| `limit` | `int` | `50` | عدد النتائج (الحد الأقصى للخادم 50) |
+| `continuous_only` | `bool` | `True` | في الاستعراض: العقود المستمرة فقط (`CL1!`) لا كل عقود الشهر |
+| `lang` | `str` | `"en"` | لغة الواجهة المطلوبة |
+| `timeout` | `float` | `10` | مهلة الطلب بالثواني |
+| `proxies` | `dict` | `None` | وكيل اختياري (أو عبر `tv.search_futures(...)`) |
+
+**الناتج:** نفس بنية `search_symbol` مع حقول مستقبليات إضافية:
+
+```python
+{
+    "symbol": "GC1!",
+    "full_name": "COMEX:GC1!",          # جاهزة للإرسال إلى get_hist
+    "description": "Gold Futures",
+    "exchange": "COMEX",
+    "exchange_id": "COMEX",
+    "type": "futures",
+    "country": None,                    # المجمّع لا يوفّر الدولة → None دائماً
+    "currency_code": "USD",
+    "typespecs": ["continuous", "synthetic"],
+    "product": "Commodity/Metals/Precious/Gold",  # التصنيف الفرعي الكامل
+    "category": "metals",               # أحد التصنيفات العشرة
+    "categories": ["metals"],
+    "logoid": "metal/gold",
+    "close": 4035.6, "change": 0.42,
+    "continuous": True,                 # عقد مستمر (1!) لا شهري
+}
+```
+
+وفي مسار `text`/`country` (بحث الرموز) يُضاف `contracts` و`continuous_symbol` (العقد المستمر لكل جذر):
+
+```python
+hits = search_futures("crude oil", category="energy")
+hit = next(r for r in hits if r["full_name"] == "NYMEX:CL")
+tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"], fut_contract=1)  # أو hit["continuous_symbol"]
+```
+
+> **متى يُستخدم المجمّع ومتى بحث الرموز؟** وجود `text` أو `country` يوجّه الطلب إلى بحث الرموز (سقف 50 لكل استعلام، ويُرجع **الجذر** مثل `CL`)، ثم يُصنَّف كل جذر عبر المجمّع. أما الاستعراض (`category`/`product`/`exchange` فقط) فيُجاب من المجمّع مباشرة (عقود محددة مثل `CL1!`).
+>
+> **`ValueError` مقابل `[]`:** التصنيف/الدولة/الحد/المهلة/اللغة الخاطئة ترمي `ValueError` فوراً، وكذلك `product` الذي لا ينتمي إلى `category`؛ **أعطال الشبكة فقط** تعيد `[]`.
+
+التفاصيل الكاملة في [`docs/USAGE.md`](docs/USAGE.md) وقسم 6 من [`examples/example_usage.py`](examples/example_usage.py).
+
 ### كيف أعرف المنطقة الزمنية للبيانات؟
 
 ```python
@@ -209,11 +291,12 @@ pytest tests -v
 - سلامة قيم OHLCV
 - رفض مناطق الزمن غير الصحيحة قبل فتح أي اتصال
 - **`search_symbol`**: بناء المعاملات/الهيدرز، مرادفات الأنواع والدول، فلترة السلع، `exchange_id`/`full_name`، `ValueError` للمعاملات الخاطئة، `[]` لأعطال الشبكة، و`TvDatafeedLive.new_seis`
+- **`search_futures`**: التصنيفات العشرة (عربي/إنجليزي)، بناء فلاتر المجمّع (`product` regex + `exchange` + العقود المستمرة)، التصنيف الفرعي `product`، إعادة محاولة البورصة بالأحرف الكبيرة، مسار `text`/`country` عبر بحث الرموز مع التصنيف، `ValueError` للمعاملات الخاطئة و`[]` لأعطال الشبكة
 
 **اختبارات حية (اختيارية)** تتصل بـ TradingView فعلياً وتراجع صحة البيانات (بحث بالنوع/الدولة، نص عربي، تنزيل رمز مُرجَع عبر `get_hist`):
 
 ```bash
-TV_LIVE=1 pytest tests/test_search_live.py -v
+TV_LIVE=1 pytest tests/test_search_live.py tests/test_futures_live.py -v
 ```
 
 ---
@@ -241,6 +324,7 @@ This fork fixes both:
 - **`get_hist(..., timezone=)`** — `"UTC"` (default, tz-aware), any IANA name (`"Africa/Cairo"`, `"Asia/Riyadh"`, ...), or `"exchange"` (naive, exchange clock). The index is always tz-aware / deterministic: `data.index.tz` tells you exactly what you are looking at.
 - **`get_hist(..., align_daily_to_trading_day=True)`** — daily bars that open at/after 12:00 local time span midnight, so they are dated by their **closing (trading) day**. The last bar is now dated *today*.
 - **`search_symbol(text, exchange='', type=None, country=None, ...)`** — look up symbols **without any login** (also exposed as a module-level standalone `search_symbol`) with optional filters by asset type (`commodity/سلع`, `bond/سندات`, `forex/فوريكس`, ...) and country (ISO-2 or Arabic/English names). Returns normalised dicts with `full_name`, `exchange_id`, `country` (`None` for commodities/forex), `currency_code`, `typespecs`. Invalid arguments raise `ValueError`; network failures return `[]`.
+- **`search_futures(text='', exchange=None, category=None, product=None, country=None, ...)`** — dedicated **futures** search by **country + exchange + category + sub-category** (`single_stock`, `world_indices`, `currencies`, `interest_rates`, `energy`, `agriculture`, `metals`, `weather`, `building_materials`, `chemicals` — English or Arabic names), powered by TradingView's futures screener (`product` taxonomy) and its symbol search (for country). Returns `search_symbol`-shaped dicts plus `product`, `category`, `categories`, `continuous`; text/country lookups also expose `continuous_symbol`. Also `list_futures_categories()` and the `tv.search_futures(...)` method.
 
 OHLCV values are untouched; only the datetime column and timezone semantics changed. Offline test suite included (`pytest tests`).
 

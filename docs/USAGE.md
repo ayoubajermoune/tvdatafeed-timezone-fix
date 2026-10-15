@@ -273,6 +273,180 @@ print(df.tail(3))
 
 ---
 
+### `search_futures(...)` — البحث في العقود الآجلة حسب الدولة/البورصة/التصنيف (بدون تسجيل دخول)
+
+بحث مخصّص لسوق **العقود الآجلة (Futures)** يفلتر بـ:
+
+1. **الدولة** (`country`)
+2. **البورصة** (`exchange`)
+3. **التصنيف** (`category`) — التصنيفات العشرة
+4. **التصنيف الفرعي** (`product`) — هرمية TradingView الكاملة
+
+كل ذلك **دون حساب**، وبدون حتى إنشاء كائن:
+
+```python
+from tvDatafeed import search_futures, list_futures_categories
+
+search_futures(category="الطاقة", exchange="NYMEX")     # طاقة نيويورك
+search_futures(country="الهند", category="metals")       # ذهب/فضة/نحاس بورصة MCX
+search_futures("crude oil", category="energy")           # نص + تصنيف
+search_futures(product="Commodity/Metals/Precious")      # تصنيف فرعي
+list_futures_categories()                                # جدول التصنيفات
+```
+
+كطريقة على كائن `TvDatafeed` (ترث إعدادات الوكيل `proxies` تلقائياً):
+
+```python
+from tvDatafeed import TvDatafeed
+tv = TvDatafeed()                    # بدون بيانات دخول — nologin
+tv.search_futures(category="weather", continuous_only=False)
+```
+
+#### التوقيع الكامل
+
+```python
+search_futures(
+    text: str = "",              # نص بحث اختياري — فارغ = استعراض بالحسابات الأخرى
+    exchange: str = None,        # معرف البورصة ("NYMEX", "CME", "EUREX", ...)
+    category: str = None,        # التصنيف — عربي أو إنجليزي (الجدول أدناه)
+    product: str = None,         # التصنيف الفرعي (المسار الهرمي، مطابقة بالبداية)
+    country: str = None,         # الدولة: ISO-2 أو اسم عربي/إنجليزي
+    limit: int = 50,             # عدد النتائج (1..50، و50 حدّ الخادم)
+    continuous_only: bool = True,# في الاستعراض: العقود المستمرة فقط (CL1!)
+    lang: str = "en",            # لغة الواجهة
+    timeout: float = 10,         # مهلة الطلب بالثواني
+    proxies: dict = None,        # وكيل اختياري {"https": "http://..."}
+) -> list[dict]
+```
+
+#### التصنيفات العشرة `category`
+
+المصدر هو عمود `product` في مجمّع TradingView للعقود الآجلة، وهو تصنيف هرمي مطابق تماماً للتصنيفات المطلوبة:
+
+| القيمة (إنجليزي) | مرادفات عربية مقبولة | تصنيف TradingView (`product`) | أمثلة |
+|---|---|---|---|
+| `"single_stock"` | `"الأسهم الفردية"`، `"أسهم فردية"`، `"سهم"` | `Financial/Equity` | عقود أسهم فردية |
+| `"world_indices"` | `"المؤشرات العالمية"`، `"مؤشرات"`، `"مؤشر"` | `Financial/Index` | S&P 500، DAX، Nikkei |
+| `"currencies"` | `"العملات"`، `"فوريكس"`، `"فوركس"` | `Financial/Currency` | EUR/USD، JPY |
+| `"interest_rates"` | `"أسعار الفائدة"`، `"الفائدة"`، `"العوائد"` | `Financial/InterestRate` | السندات قصيرة/طويلة الأجل |
+| `"energy"` | `"الطاقة"`، `"النفط"`، `"الغاز"`، `"فحم"` | `Commodity/Energy...` | خام WTI، برنت، غاز، بنزين |
+| `"agriculture"` | `"الزراعة"`، `"المحاصيل"`، `"زراعي"` | `Commodity/Agriculture...` | قمح، ذرة، سكر، قهوة |
+| `"metals"` | `"المعادن"`، `"معدن"` | `Commodity/Metals...` | ذهب، فضة، نحاس، ألومنيوم |
+| `"weather"` | `"الطقس"`، `"المناخ"`، `"الحرارة"` | `Commodity/Weather` | HDD/CDD لحرارة/برودة |
+| `"building_materials"` | `"مواد البناء"`، `"البناء"`، `"الأخشاب"` | `Commodity/BuildingMaterials` | زجاج مسطح، خشب |
+| `"chemicals"` | `"المواد الكيميائية"`، `"الكيماويات"` | `Commodity/Chemicals` | مواد كيميائية |
+
+المطابقة غير حساسة لحالة الأحرف ولا للشرطات/الشرطات السفلية (`"building-materials"` = `"building_materials"`). أي قيمة غير معروفة ترمي `ValueError` فوراً مع سرد التصنيفات الصالحة.
+
+#### التصنيف الفرعي `product`
+
+`product` هو المسار الكامل في هرمية TradingView، والمطابقة **بالبداية** (كل ما تحت المسار):
+
+```python
+search_futures(product="Commodity/Metals")               # كل المعادن
+search_futures(product="Commodity/Metals/Precious")      # المعادن النفيسة فقط
+search_futures(product="Commodity/Metals/Precious/Gold") # الذهب فقط
+search_futures(product="Commodity/Energy/Oil/CrudeOil")  # خام فقط
+```
+
+عند تمرير `category` و`product` معاً يجب أن ينتمي `product` إلى `category` وإلا يُرمى `ValueError`:
+
+```python
+search_futures(category="metals", product="Commodity/Metals/Ferrous")   # ✓ يعمل
+search_futures(category="metals", product="Commodity/Energy/Oil")       # ✗ ValueError
+```
+
+#### الفلترة بالبورصة `exchange` والدولة `country`
+
+```python
+search_futures(category="energy", exchange="NYMEX")      # بورصة محددة
+search_futures(category="energy", exchange="nymex")      # إعادة محاولة تلقائية بالأحرف الكبيرة
+search_futures(country="IN")                             # كل عقود الهند
+search_futures(country="الهند", category="metals")       # ★ الدولة + التصنيف معاً
+search_futures(country="الولايات المتحدة", category="world_indices")
+```
+
+> **كيف تعمل الفلترة بالدولة؟** مجمّع العقود الآجلة لا يحمل حقل الدولة إطلاقاً، لذا تمرّ الفلترة بالدولة عبر **بحث الرموز** (`symbol-search`) ثم يُصنَّف كل رمز عبر المجمّع. سقف استعلام بحث الرموز 50 نتيجة (كما في `search_symbol`). أما فلاتر التصنيف/التصنيف الفرعي/البورصة فتُنفَّذ على الخادم مباشرة في المجمّع.
+
+#### العقود المستمرة مقابل الشهرية
+
+- **الاستعراض** (`text=""` و`country=None`) يعيد **عقود الشهر أيضاً** ما لم تُمرّر `continuous_only=True` (الافتراضي)، أي العقود المستمرة فقط: `CL1!`، `GC1!`، ...
+- **البحث بـ `text`/`country`** يعيد **الجذر** (`CL`) لأنه ما يرجع من بحث الرموز، مع إضافة `continuous_symbol` (`CL1!`) لتمكين التحميل المباشر.
+
+#### بنية الناتج
+
+عنصر نموذجي (من الاستعراض):
+
+```python
+{
+    "symbol": "GC1!",
+    "full_name": "COMEX:GC1!",         # جاهزة للإرسال إلى get_hist
+    "description": "Gold Futures",
+    "exchange": "COMEX",
+    "exchange_id": "COMEX",
+    "type": "futures",
+    "country": None,                   # المجمّع لا يوفّر الدولة → None دائماً
+    "currency_code": "USD",
+    "typespecs": ["continuous", "synthetic"],
+    "product": "Commodity/Metals/Precious/Gold",  # التصنيف الفرعي الكامل
+    "category": "metals",              # أحد التصنيفات العشرة
+    "categories": ["metals"],
+    "logoid": "metal/gold",
+    "close": 4035.6,
+    "change": 0.42,
+    "continuous": True,                # عقد مستمر (1!) لا شهري
+}
+```
+
+وفي مسار `text`/`country` تحتوي النتيجة أيضاً على `contracts` (قائمة عقود الجذر مع `typespecs`) و`continuous_symbol` (`CL1!`).
+
+#### الأخطاء
+
+| الحالة | النتيجة |
+|---|---|
+| `category` غير معروف / فارغ | `ValueError` فوري مع سرد التصنيفات العشرة |
+| `product` لا ينتمي إلى `category` | `ValueError` فوري |
+| `country="XYZ"` / `limit` ≤ 0 / `timeout` ≤ 0 / `lang` فارغ | `ValueError` فوري |
+| `exchange` بحالة خاطئة (`nymex` بدل `NYMEX`) | إعادة محاولة تلقائية بحروف كبيرة |
+| بورصة/تصنيف لا نتائج له | قائمة فارغة `[]` (بلا استثناء) |
+| انقطاع شبكة / HTTP غير 200 / استجابة غير JSON | قائمة فارغة `[]` + رسالة في اللوج |
+
+#### أمثلة عملية كاملة
+
+```python
+from tvDatafeed import search_futures, list_futures_categories, TvDatafeed, Interval
+
+tv = TvDatafeed()
+
+# 1) استعراض التصنيفات المتاحة
+for c in list_futures_categories():
+    print(c["id"], "->", c["product"], "|", c["label"])
+
+# 2) الطاقة في نيويورك (عقود مستمرة) + تنزيل البيانات
+hits = search_futures(category="الطاقة", exchange="NYMEX", limit=10)
+df = tv.get_hist(symbol=hits[0]["symbol"], exchange=hits[0]["exchange_id"],
+                 interval=Interval.in_daily, n_bars=100)
+
+# 3) نص + تصنيف: الجذر ثم العقد المستمر
+hits = search_futures("crude oil", category="energy")
+cl = next(r for r in hits if r["full_name"] == "NYMEX:CL")
+df = tv.get_hist(symbol=cl["symbol"], exchange=cl["exchange_id"], fut_contract=1, n_bars=100)
+# أو مباشرة: tv.get_hist(symbol=cl["continuous_symbol"], exchange=cl["exchange_id"], n_bars=100)
+
+# 4) الدولة + التصنيف
+mcx_metals = search_futures(country="الهند", category="المعادن", limit=20)
+print([r["full_name"] for r in mcx_metals])
+
+# 5) تصنيف فرعي
+gold_only = search_futures(product="Commodity/Metals/Precious/Gold", limit=20)
+print(all(r["product"].startswith("Commodity/Metals/Precious/Gold") for r in gold_only))  # True
+
+# 6) كل عقود الشهر لا المستمرة فقط
+months = search_futures(category="weather", continuous_only=False, limit=20)
+```
+
+---
+
 ## 3) مثال مقارنة قبل / بعد
 
 ```python
@@ -327,3 +501,7 @@ tv.get_hist(..., timezone="exchange", align_daily_to_trading_day=False)
 **لماذا آخر صف دائماً بتاريخ اليوم؟** لأن TradingView يرسل الشمعة الجارية (القيد التكوين) ضمن النتيجة؛ نعيد تسميتها بتاريخ يوم التداول الفعلي.
 
 **هل تعمل مناطق توقيت مثل DST؟** نعم — التحويل يتم من UTC المعروف، فلا توجد أخطاء غموض التوقيت الصيفي.
+
+**كيف أبحث في العقود الآجلة حسب التصنيف (طاقة/معادن/طقس...)؟** استخدم `search_futures(category=...)` — الجدول الكامل أعلاه. التصنيف يأتي من شاشة TradingView للعقود الآجلة نفسها (عمود `product` الهرمي)، فلا حاجة إلى أي قائمة يدوية، ويمكن النزول للتصنيف الفرعي عبر `product=`.
+
+**لماذا `country=None` في نتائج `search_futures`؟** لأن **مجمّع** العقود الآجلة (مصدر نتائج الاستعراض) لا يوفّر حقل الدولة إطلاقاً وتُعرض قيمته `None` بلا خطأ. أما إذا فلترت بـ `country=` فالنتائج تأتي من بحث الرموز وتحمل الدولة فعلاً (`"IN"`، `"US"`...).
