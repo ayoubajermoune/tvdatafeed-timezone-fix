@@ -32,7 +32,7 @@ pip install -e .
 ### الطريقة 4: إضافة المسار مباشرة (بدون تثبيت)
 ```python
 import sys
-sys.path.insert(0, "/المسار/إلى/tvdatafeed-timezone-fix")
+sys.path.insert(0, "/path/to/tvdatafeed-timezone-fix")
 from tvDatafeed import TvDatafeed, Interval
 ```
 
@@ -67,8 +67,8 @@ from tvDatafeed import TvDatafeed, Interval
 إنشاء العميل. بدون بيانات دخول يعمل بوضع "nologin" (البيانات قد تكون محدودة).
 
 ```python
-tv = TvDatafeed()                      # بدون تسجيل دخول
-tv = TvDatafeed("user", "pass")        # بحساب TradingView
+tv = TvDatafeed()                      # without login
+tv = TvDatafeed("user", "pass")        # with a TradingView account
 ```
 
 ---
@@ -77,14 +77,14 @@ tv = TvDatafeed("user", "pass")        # بحساب TradingView
 
 ```python
 tv.get_hist(
-    symbol: str,                        # رمز السهم/السلعة، أو بالصيغة "EXCHANGE:SYMBOL"
-    exchange: str = "NSE",              # البورصة (تُتجاهل إذا كان الرمز بصيغة EXCHANGE:SYMBOL)
+    symbol: str,                        # symbol name, or the "EXCHANGE:SYMBOL" form
+    exchange: str = "NSE",              # exchange (ignored when the symbol is EXCHANGE:SYMBOL)
     interval: Interval = Interval.in_daily,
-    n_bars: int = 10,                   # عدد الشموع (الحد الأقصى ~5000)
-    fut_contract: int = None,           # None للنقد، 1/2 للعقود الآجلة المستمرة
-    extended_session: bool = False,     # جلسة ممتدة (خارج أوقات العمل الرسمية)
-    timezone: str = "UTC",              # ★ الإضافة الجديدة — المنطقة الزمنية
-    align_daily_to_trading_day: bool = True,  # ★ الإضافة الجديدة — تصحيح تاريخ الشموع اليومية
+    n_bars: int = 10,                   # number of bars (max ~5000)
+    fut_contract: int = None,           # None for cash, 1/2 for continuous futures
+    extended_session: bool = False,     # extended session (outside regular hours)
+    timezone: str = "UTC",              # ★ new -- timezone
+    align_daily_to_trading_day: bool = True,  # ★ new -- daily-bar date alignment
 ) -> pd.DataFrame
 ```
 
@@ -115,13 +115,13 @@ from tvDatafeed import TvDatafeed, Interval
 
 tv = TvDatafeed()
 
-# ذهب يومي بتوقيت UTC (الافتراضي) — آخر صف بتاريخ اليوم
+# daily gold in UTC (default) -- last row dated today
 df = tv.get_hist(symbol="XAUUSD", exchange="BLACKBULL",
                  interval=Interval.in_daily, n_bars=100)
 
-# آخر صف هو شمعة اليوم الجارية بتاريخ اليوم الصحيح
+# the last row is today's forming bar, dated correctly
 print(df.tail(3))
-print("المنطقة الزمنية:", df.index.tz)
+print("timezone:", df.index.tz)
 ```
 
 #### بنية الناتج
@@ -144,16 +144,16 @@ print("المنطقة الزمنية:", df.index.tz)
 ```python
 from tvDatafeed import search_symbol
 
-search_symbol("gold")                       # بحث عام
-search_symbol("Saudi Arabian Oil")          # بحث بالنص
-search_symbol("XAUUSD", "BLACKBULL")        # بحث داخل بورصة محددة: المعامل الثاني exchange
+search_symbol("gold")                       # general search
+search_symbol("Saudi Arabian Oil")          # text search
+search_symbol("XAUUSD", "BLACKBULL")        # search within a specific exchange: 2nd positional arg exchange
 ```
 
 كطريقة على كائن `TvDatafeed` (ترث إعدادات الوكيل `proxies` تلقائياً):
 
 ```python
 from tvDatafeed import TvDatafeed
-tv = TvDatafeed()                    # بدون بيانات دخول — nologin
+tv = TvDatafeed()                    # no credentials -- nologin
 tv.search_symbol("gold")
 ```
 
@@ -161,15 +161,15 @@ tv.search_symbol("gold")
 
 ```python
 search_symbol(
-    text: str,             # اسم الرمز أو وصفه (نص حر)
-    exchange: str = "",    # معرف البورصة (مثل "BLACKBULL" أو "TADAWUL") — اختياري
-    type: str = None,      # نوع الأصل — إنجليزي (الجدول أدناه)
-    country: str = None,   # الدولة: رمز ISO-2 أو اسم بالإنجليزية — اختياري
-    limit: int = 50,       # عدد النتائج (1..50، والـ 50 حدّ الخادم الأقصى)
-    lang: str = "en",      # لغة الواجهة المطلوبة من TradingView
-    timeout: float = 10,   # مهلة الطلب بالثواني
-    proxies: dict = None,  # وكيل اختياري {"https": "http://..."}
-    extra: dict = None,    # معاملات إضافية تُمرَّر للخادم كما هي (تخصيص)
+    text: str,             # symbol name or description (free text)
+    exchange: str = "",    # exchange id (e.g. "BLACKBULL" or "TADAWUL") -- optional
+    type: str = None,      # asset type (see the table below)
+    country: str = None,   # country: ISO-2 code or English name -- optional
+    limit: int = 50,       # number of results (1..50; 50 is the server max)
+    lang: str = "en",      # interface language requested from TradingView
+    timeout: float = 10,   # request timeout in seconds
+    proxies: dict = None,  # optional proxy {"https": "http://..."}
+    extra: dict = None,    # extra params forwarded verbatim (customisation)
 ) -> list[dict]
 ```
 
@@ -199,8 +199,8 @@ search_symbol(
 تقبل رمز ISO-3166 alpha-2 (مثل `"SA"` أو `"US"`) أو اسماً بالإنجليزية من قاعدة مرادفات تغطي الأسواق الرئيسية والدول العربية:
 
 ```python
-search_symbol("bank", country="SA")                # → country=SA — كل النتائج TADAWUL
-search_symbol("Saudi Arabian Oil", country="SA")   # نص بحث + رمز الدولة
+search_symbol("bank", country="SA")                # -> country=SA -- every result is TADAWUL
+search_symbol("Saudi Arabian Oil", country="SA")   # text search + ISO country
 search_symbol("bank", country="SA", type="stock")
 ```
 
@@ -213,16 +213,16 @@ search_symbol("bank", country="SA", type="stock")
 ```python
 {
     "symbol": "XAUUSD",
-    "full_name": "BLACKBULL:XAUUSD",   # جاهزة للإرسال إلى get_hist (الصيغة EXCHANGE:SYMBOL)
+    "full_name": "BLACKBULL:XAUUSD",   # ready to pass to get_hist (EXCHANGE:SYMBOL form)
     "description": "Gold",
-    "exchange": "BlackBull Markets",   # الاسم المعروض لدى TradingView
-    "exchange_id": "BLACKBULL",        # ★ المعرف الحقيقي المطلوب في get_hist
+    "exchange": "BlackBull Markets",   # display name on TradingView
+    "exchange_id": "BLACKBULL",        # ★ the real id required by get_hist
     "type": "commodity",
-    "country": None,                   # None للسلع/الفوريكس/... (المفتاح موجود دائماً)
+    "country": None,                   # None for commodities/forex/... (the key is always present)
     "currency_code": "USD",
-    "typespecs": ["cfd"],              # قائمة دائماً ([] إن لم توجد)
+    "typespecs": ["cfd"],              # always a list ([] when absent)
     "provider_id": "blackbullmarkets",
-    # ... أي حقول إضافية ترجعها TradingView تبقى كما هي (logoid, isin, ...)
+    # ... any extra fields TradingView returns are kept (logoid, isin, ...)
 }
 ```
 
@@ -251,20 +251,20 @@ from tvDatafeed import search_symbol, TvDatafeed, Interval
 
 tv = TvDatafeed()
 
-# 1) كل رموز أرامكو السعودية (نص بحث + دولة)
+# 1) all Saudi Aramco symbols (text search + country)
 aramco = search_symbol("Saudi Arabian Oil", country="SA")
 print([r["full_name"] for r in aramco])          # ['TADAWUL:2222', ...]
 
-# 2) السلع فقط — ذهب ونفط
+# 2) commodities only -- gold and oil
 gold = search_symbol("gold", type="commodity", limit=10)
 oil  = search_symbol("oil",  type="commodity", limit=10)
 print(all(r["type"] == "commodity" for r in gold + oil))   # True
 
-# 3) السندات والفوريكس
+# 3) bonds and forex
 print(len(search_symbol("apple",  type="bond")))            # > 0
 print(len(search_symbol("EURUSD", type="forex")))           # > 0
 
-# 4) تحميل بيانات لأول نتيجة بحث
+# 4) download data for the first search hit
 hit = search_symbol("XAUUSD", "BLACKBULL")[0]
 df = tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"],
                  interval=Interval.in_daily, n_bars=50, timezone="UTC")
@@ -287,18 +287,18 @@ print(df.tail(3))
 ```python
 from tvDatafeed import search_futures, list_futures_categories
 
-search_futures(category="energy", exchange="NYMEX")      # طاقة نيويورك
-search_futures(country="IN", category="metals")           # ذهب/فضة/نحاس بورصة MCX
-search_futures("crude oil", category="energy")           # نص + تصنيف
-search_futures(product="Commodity/Metals/Precious")      # تصنيف فرعي
-list_futures_categories()                                # جدول التصنيفات
+search_futures(category="energy", exchange="NYMEX")      # NYMEX energy
+search_futures(country="IN", category="metals")           # MCX gold/silver/copper
+search_futures("crude oil", category="energy")           # text + category
+search_futures(product="Commodity/Metals/Precious")      # sub-category
+list_futures_categories()                                # the categories table
 ```
 
 كطريقة على كائن `TvDatafeed` (ترث إعدادات الوكيل `proxies` تلقائياً):
 
 ```python
 from tvDatafeed import TvDatafeed
-tv = TvDatafeed()                    # بدون بيانات دخول — nologin
+tv = TvDatafeed()                    # no credentials -- nologin
 tv.search_futures(category="weather", continuous_only=False)
 ```
 
@@ -306,16 +306,16 @@ tv.search_futures(category="weather", continuous_only=False)
 
 ```python
 search_futures(
-    text: str = "",              # نص بحث اختياري — فارغ = استعراض بالحسابات الأخرى
-    exchange: str = None,        # معرف البورصة ("NYMEX", "CME", "EUREX", ...)
-    category: str = None,        # التصنيف — إنجليزي (الجدول أدناه)
-    product: str = None,         # التصنيف الفرعي (المسار الهرمي، مطابقة بالبداية)
-    country: str = None,         # الدولة: ISO-2 أو اسم بالإنجليزية
-    limit: int = 50,             # عدد النتائج (1..50، و50 حدّ الخادم)
-    continuous_only: bool = True,# في الاستعراض: العقود المستمرة فقط (CL1!)
-    lang: str = "en",            # لغة الواجهة
-    timeout: float = 10,         # مهلة الطلب بالثواني
-    proxies: dict = None,        # وكيل اختياري {"https": "http://..."}
+    text: str = "",              # optional text -- empty = browse using the other filters
+    exchange: str = None,        # exchange id ("NYMEX", "CME", "EUREX", ...)
+    category: str = None,        # category (see the table below)
+    product: str = None,         # sub-category (hierarchy path, prefix match)
+    country: str = None,         # country: ISO-2 or English name
+    limit: int = 50,             # number of results (1..50; 50 is the server max)
+    continuous_only: bool = True,# when browsing: continuous contracts only (CL1!)
+    lang: str = "en",            # interface language
+    timeout: float = 10,         # request timeout in seconds
+    proxies: dict = None,        # optional proxy {"https": "http://..."}
 ) -> list[dict]
 ```
 
@@ -343,26 +343,26 @@ search_futures(
 `product` هو المسار الكامل في هرمية TradingView، والمطابقة **بالبداية** (كل ما تحت المسار):
 
 ```python
-search_futures(product="Commodity/Metals")               # كل المعادن
-search_futures(product="Commodity/Metals/Precious")      # المعادن النفيسة فقط
-search_futures(product="Commodity/Metals/Precious/Gold") # الذهب فقط
-search_futures(product="Commodity/Energy/Oil/CrudeOil")  # خام فقط
+search_futures(product="Commodity/Metals")               # all metals
+search_futures(product="Commodity/Metals/Precious")      # precious metals only
+search_futures(product="Commodity/Metals/Precious/Gold") # gold only
+search_futures(product="Commodity/Energy/Oil/CrudeOil")  # crude oil only
 ```
 
 عند تمرير `category` و`product` معاً يجب أن ينتمي `product` إلى `category` وإلا يُرمى `ValueError`:
 
 ```python
-search_futures(category="metals", product="Commodity/Metals/Ferrous")   # ✓ يعمل
+search_futures(category="metals", product="Commodity/Metals/Ferrous")   # ✓ works
 search_futures(category="metals", product="Commodity/Energy/Oil")       # ✗ ValueError
 ```
 
 #### الفلترة بالبورصة `exchange` والدولة `country`
 
 ```python
-search_futures(category="energy", exchange="NYMEX")      # بورصة محددة
-search_futures(category="energy", exchange="nymex")      # إعادة محاولة تلقائية بالأحرف الكبيرة
-search_futures(country="IN")                             # كل عقود الهند
-search_futures(country="IN", category="metals")          # ★ الدولة + التصنيف معاً
+search_futures(category="energy", exchange="NYMEX")      # specific exchange
+search_futures(category="energy", exchange="nymex")      # automatic upper-case retry
+search_futures(country="IN")                             # all India contracts
+search_futures(country="IN", category="metals")          # ★ country + category together
 search_futures(country="US", category="world_indices")
 ```
 
@@ -380,21 +380,21 @@ search_futures(country="US", category="world_indices")
 ```python
 {
     "symbol": "GC1!",
-    "full_name": "COMEX:GC1!",         # جاهزة للإرسال إلى get_hist
+    "full_name": "COMEX:GC1!",         # ready to pass to get_hist
     "description": "Gold Futures",
     "exchange": "COMEX",
     "exchange_id": "COMEX",
     "type": "futures",
-    "country": None,                   # المجمّع لا يوفّر الدولة → None دائماً
+    "country": None,                   # the screener provides no country -> always None
     "currency_code": "USD",
     "typespecs": ["continuous", "synthetic"],
-    "product": "Commodity/Metals/Precious/Gold",  # التصنيف الفرعي الكامل
-    "category": "metals",              # أحد التصنيفات العشرة
+    "product": "Commodity/Metals/Precious/Gold",  # full sub-category path
+    "category": "metals",              # one of the ten categories
     "categories": ["metals"],
     "logoid": "metal/gold",
     "close": 4035.6,
     "change": 0.42,
-    "continuous": True,                # عقد مستمر (1!) لا شهري
+    "continuous": True,                # continuous contract (1!), not monthly
 }
 ```
 
@@ -418,30 +418,30 @@ from tvDatafeed import search_futures, list_futures_categories, TvDatafeed, Inte
 
 tv = TvDatafeed()
 
-# 1) استعراض التصنيفات المتاحة
+# 1) list the available categories
 for c in list_futures_categories():
     print(c["id"], "->", c["product"], "|", c["label"])
 
-# 2) الطاقة في نيويورك (عقود مستمرة) + تنزيل البيانات
+# 2) NYMEX energy (continuous) + download data
 hits = search_futures(category="energy", exchange="NYMEX", limit=10)
 df = tv.get_hist(symbol=hits[0]["symbol"], exchange=hits[0]["exchange_id"],
                  interval=Interval.in_daily, n_bars=100)
 
-# 3) نص + تصنيف: الجذر ثم العقد المستمر
+# 3) text + category: root then continuous contract
 hits = search_futures("crude oil", category="energy")
 cl = next(r for r in hits if r["full_name"] == "NYMEX:CL")
 df = tv.get_hist(symbol=cl["symbol"], exchange=cl["exchange_id"], fut_contract=1, n_bars=100)
-# أو مباشرة: tv.get_hist(symbol=cl["continuous_symbol"], exchange=cl["exchange_id"], n_bars=100)
+# or directly: tv.get_hist(symbol=cl["continuous_symbol"], exchange=cl["exchange_id"], n_bars=100)
 
-# 4) الدولة + التصنيف
+# 4) country + category
 mcx_metals = search_futures(country="IN", category="metals", limit=20)
 print([r["full_name"] for r in mcx_metals])
 
-# 5) تصنيف فرعي
+# 5) sub-category
 gold_only = search_futures(product="Commodity/Metals/Precious/Gold", limit=20)
 print(all(r["product"].startswith("Commodity/Metals/Precious/Gold") for r in gold_only))  # True
 
-# 6) كل عقود الشهر لا المستمرة فقط
+# 6) every monthly contract, not just continuous
 months = search_futures(category="weather", continuous_only=False, limit=20)
 ```
 
@@ -456,16 +456,16 @@ tv = TvDatafeed()
 args = {"symbol": "XAUUSD", "exchange": "BLACKBULL",
         "interval": Interval.in_daily, "n_bars": 5}
 
-before = tv.get_hist(**args, align_daily_to_trading_day=False)  # الأصلي
-after  = tv.get_hist(**args)                                     # المُصلح
+before = tv.get_hist(**args, align_daily_to_trading_day=False)  # original
+after  = tv.get_hist(**args)                                     # fixed
 
-print("قبل:", before.index.tolist())
-print("بعد:", after.index.tolist())
+print("before:", before.index.tolist())
+print("after:", after.index.tolist())
 ```
 
 ```
-قبل: [2026-09-20 22:00, 2026-09-21 22:00, 2026-09-22 22:00, 2026-09-23 22:00]
-بعد: [2026-09-21 22:00, 2026-09-22 22:00, 2026-09-23 22:00, 2026-09-24 22:00]
+before: [2026-09-20 22:00, 2026-09-21 22:00, 2026-09-22 22:00, 2026-09-23 22:00]
+after: [2026-09-21 22:00, 2026-09-22 22:00, 2026-09-23 22:00, 2026-09-24 22:00]
 ```
 
 ---
