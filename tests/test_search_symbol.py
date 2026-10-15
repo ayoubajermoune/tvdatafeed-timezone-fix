@@ -139,30 +139,21 @@ def test_extra_params_are_forwarded_verbatim():
 
 
 # ---------------------------------------------------------------------------
-# 2) asset types: English + Arabic aliases
+# 2) asset types: aliases map onto TradingView's server values
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "given,expected_server",
     [
         ("stock", "stock"),
-        ("الأسهم", "stock"),
         ("bonds", "bond"),
-        ("السندات", "bond"),
         ("forex", "forex"),
-        ("الفوريكس", "forex"),
-        ("فوركس", "forex"),
         ("index", "index"),
-        ("المؤشرات", "index"),
         ("crypto", "crypto"),
-        ("العملات الرقمية", "crypto"),
         ("futures", "futures"),
-        ("العقود الآجلة", "futures"),
         ("options", "options"),
-        ("الخيارات", "options"),
         ("etf", "etf"),
         ("funds", "funds"),
         ("cfds", "cfd"),
-        ("عقود الفروقات", "cfd"),
         ("warrants", "warrant"),
         ("STOCK", "stock"),  # case-insensitive
     ],
@@ -179,7 +170,7 @@ def test_commodity_is_sent_as_cfd_but_returned_commodities_only():
         {"symbol": "EURUSD", "exchange": "OANDA", "type": "forex"},
         {"symbol": "XTIUSD", "exchange": "FOREXCOM", "type": "commodity"},
     ]
-    out, get = _call(responses=[mixed], text="gold", type="السلع")
+    out, get = _call(responses=[mixed], text="gold", type="commodity")
     assert get.call_args[1]["params"]["type"] == "cfd"
     assert [r["type"] for r in out] == ["commodity", "commodity"]
 
@@ -223,9 +214,9 @@ def test_commodity_falls_back_to_an_unfiltered_request():
 
 def test_unknown_asset_type_raises_with_supported_list():
     with pytest.raises(ValueError) as exc:
-        search_symbol("gold", type="سلعة غير موجودة")
+        search_symbol("gold", type="nope")
     msg = str(exc.value)
-    assert "commodity" in msg and "السلع" in msg and "bond" in msg
+    assert "commodity" in msg and "Commodities" in msg and "bond" in msg
 
 
 def test_non_string_asset_type_raises():
@@ -234,18 +225,17 @@ def test_non_string_asset_type_raises():
 
 
 # ---------------------------------------------------------------------------
-# 3) countries: ISO codes + Arabic/English names
+# 3) countries: ISO codes + English names
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "given,expected",
     [
         ("SA", "SA"),
         ("sa", "SA"),
-        ("السعودية", "SA"),
-        ("المملكة العربية السعودية", "SA"),
         ("Saudi Arabia", "SA"),
-        ("مصر", "EG"),
-        ("الإمارات", "AE"),
+        ("ksa", "SA"),
+        ("Egypt", "EG"),
+        ("UAE", "AE"),
         ("usa", "US"),
         ("Germany", "DE"),
     ],
@@ -255,7 +245,7 @@ def test_country_aliases_map_to_iso_codes(given, expected):
     assert get.call_args[1]["params"]["country"] == expected
 
 
-@pytest.mark.parametrize("bad", ["XYZ", "السعودية العربية", "Saudi", "", "   "])
+@pytest.mark.parametrize("bad", ["XYZ", "Saudi", "", "   "])
 def test_unknown_country_raises(bad):
     with pytest.raises(ValueError, match="country"):
         search_symbol("gold", country=bad)
@@ -472,13 +462,13 @@ def test_instance_method_signature_is_backwards_compatible():
 def test_instance_method_forwards_new_arguments():
     tv = _client()
     with mock.patch(PATCH_TARGET, return_value=_ok([])) as get:
-        tv.search_symbol("gold", type="السلع", country="SA", limit=5, lang="ar")
+        tv.search_symbol("gold", type="commodity", country="SA", limit=5, lang="en")
     # first request carries the resolved type filter (the mock returns no
     # records, so the commodity fallback issues a second unfiltered request)
     params = get.call_args_list[0][1]["params"]
     assert params["type"] == "cfd"
     assert params["country"] == "SA"
-    assert params["lang"] == "ar"
+    assert params["lang"] == "en"
 
 
 def test_args_invalid_detects_a_missing_symbol():

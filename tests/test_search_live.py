@@ -46,22 +46,22 @@ def test_full_name_is_consistent_with_exchange_and_symbol():
 
 
 # ---------------------------------------------------------------------------
-# asset types: Arabic + English, real data
+# asset types: English aliases, real data
 # ---------------------------------------------------------------------------
-def test_commodity_type_in_arabic_returns_commodities_only():
-    out = search_symbol("gold", type="السلع")
+def test_commodity_type_returns_commodities_only():
+    out = search_symbol("gold", type="commodity")
     assert out
     assert _only_types(out) == ["commodity"]
 
 
-def test_bond_type_in_arabic_returns_bonds_only():
-    out = search_symbol("apple", type="السندات")
+def test_bond_type_returns_bonds_only():
+    out = search_symbol("apple", type="bond")
     assert out
     assert _only_types(out) == ["bond"]
 
 
-def test_forex_type_in_arabic_returns_forex_only():
-    out = search_symbol("EURUSD", type="الفوريكس")
+def test_forex_type_returns_forex_only():
+    out = search_symbol("EURUSD", type="forex")
     assert out
     assert _only_types(out) == ["forex"]
 
@@ -83,13 +83,19 @@ def test_index_futures_crypto_options_types():
 
 
 # ---------------------------------------------------------------------------
-# country filtering: Arabic + ISO codes
+# country filtering: ISO codes + English names
 # ---------------------------------------------------------------------------
-def test_country_arabic_returns_only_that_country():
-    out = search_symbol("bank", country="السعودية")
+def test_country_iso_code_returns_only_that_country():
+    out = search_symbol("bank", country="SA")
     assert out
     assert all(r["country"] == "SA" for r in out)
     assert any(r["exchange"] == "TADAWUL" for r in out)
+
+
+def test_country_english_name_resolves_to_iso_code():
+    out = search_symbol("bank", country="Saudi Arabia")
+    assert out
+    assert all(r["country"] == "SA" for r in out)
 
 
 def test_country_iso_code_works():
@@ -99,24 +105,24 @@ def test_country_iso_code_works():
 
 
 def test_country_and_type_combine():
-    out = search_symbol("bank", country="السعودية", type="الأسهم")
+    out = search_symbol("bank", country="SA", type="stock")
     assert out
     assert all(r["country"] == "SA" for r in out)
     assert all(r["type"] in {"stock", "dr"} for r in out)
 
 
 def test_commodities_have_no_country_but_the_key_always_exists():
-    out = search_symbol("XAUUSD", type="السلع")
+    out = search_symbol("XAUUSD", type="commodity")
     assert out
     for record in out:
         assert "country" in record  # the key is always present
 
 
 # ---------------------------------------------------------------------------
-# text handling: Arabic text + special characters
+# text handling: free text + special characters
 # ---------------------------------------------------------------------------
-def test_arabic_text_search_finds_the_symbol():
-    out = search_symbol("أرامكو")
+def test_text_search_finds_the_symbol_by_description():
+    out = search_symbol("Saudi Arabian Oil")
     assert any(r["full_name"] == "TADAWUL:2222" for r in out)
     saudi = next(r for r in out if r["full_name"] == "TADAWUL:2222")
     assert saudi["description"] == "Saudi Arabian Oil Co."
@@ -130,8 +136,8 @@ def test_special_characters_never_break_the_query():
         assert isinstance(out, list)  # never raises, never returns broken data
 
 
-def test_arabic_text_with_arabic_asset_type():
-    out = search_symbol("أرامكو", type="الأسهم", country="السعودية")
+def test_text_with_type_and_country_combine():
+    out = search_symbol("Saudi Arabian Oil", type="stock", country="SA")
     assert any(r["full_name"] == "TADAWUL:2222" for r in out)
 
 

@@ -10,16 +10,16 @@ category**.  That information lives in TradingView's futures *screener*::
 whose ``product`` column is a small hierarchical taxonomy that maps exactly
 onto the ten futures categories supported here::
 
-    Financial/Equity            -> single_stock        (الأسهم الفردية)
-    Financial/Index             -> world_indices       (المؤشرات العالمية)
-    Financial/Currency          -> currencies          (العملات)
-    Financial/InterestRate      -> interest_rates      (أسعار الفائدة)
-    Commodity/Energy/...        -> energy              (الطاقة)
-    Commodity/Agriculture/...   -> agriculture         (الزراعة)
-    Commodity/Metals/...        -> metals              (المعادن)
-    Commodity/Weather           -> weather             (الطقس)
-    Commodity/BuildingMaterials -> building_materials  (مواد البناء)
-    Commodity/Chemicals         -> chemicals           (المواد الكيميائية)
+    Financial/Equity            -> single_stock        (Single stock)
+    Financial/Index             -> world_indices       (World indices)
+    Financial/Currency          -> currencies          (Currencies)
+    Financial/InterestRate      -> interest_rates      (Interest rates)
+    Commodity/Energy/...        -> energy              (Energy)
+    Commodity/Agriculture/...   -> agriculture         (Agriculture)
+    Commodity/Metals/...        -> metals              (Metals)
+    Commodity/Weather           -> weather             (Weather)
+    Commodity/BuildingMaterials -> building_materials  (Building materials)
+    Commodity/Chemicals         -> chemicals           (Chemicals)
 
 Examples
 --------
@@ -29,8 +29,8 @@ raise ``ValueError`` while *network* failures return ``[]``::
 
     from tvDatafeed import search_futures
 
-    search_futures(category="الطاقة", exchange="NYMEX")   # energy on NYMEX
-    search_futures(country="السعودية", category="metals")  # by country
+    search_futures(category="energy", exchange="NYMEX")   # energy on NYMEX
+    search_futures(country="SA", category="metals")       # by country
     search_futures("crude", category="energy")            # text + category
     search_futures(product="Commodity/Weather")           # sub-category
 """
@@ -129,99 +129,87 @@ FUTURES_CATEGORIES = {
     "single_stock": {
         "product": "Financial/Equity",
         "en": "Single stock",
-        "label": "الأسهم الفردية / Single stock",
+        "label": "Single stock",
         "aliases": [
             "single stock", "single stocks", "single stock futures",
             "single_stock", "single-stock", "stock", "stocks", "share",
             "shares", "equity", "equities",
-            "أسهم فردية", "الأسهم الفردية", "سهم", "أسهم", "اسهم", "الأسهم",
         ],
     },
     "world_indices": {
         "product": "Financial/Index",
         "en": "World indices",
-        "label": "المؤشرات العالمية / World indices",
+        "label": "World indices",
         "aliases": [
             "world indices", "world index", "world_indices", "indices",
             "indexes", "index", "stock index", "stock indices",
-            "مؤشرات", "المؤشرات", "المؤشرات العالمية", "مؤشرات عالمية",
-            "مؤشر عالمي", "مؤشر",
         ],
     },
     "currencies": {
         "product": "Financial/Currency",
         "en": "Currencies",
-        "label": "العملات / Currencies",
+        "label": "Currencies",
         "aliases": [
             "currencies", "currency", "forex", "fx", "currency futures",
-            "عملات", "العملات", "فوريكس", "فوركس", "الفوريكس", "الفوركس",
         ],
     },
     "interest_rates": {
         "product": "Financial/InterestRate",
         "en": "Interest rates",
-        "label": "أسعار الفائدة / Interest rates",
+        "label": "Interest rates",
         "aliases": [
             "interest rates", "interest rate", "rates", "rate", "yield",
             "yields", "interest_rates", "interest-rates",
-            "أسعار الفائدة", "سعر الفائدة", "الفائدة", "فوائد", "العوائد",
         ],
     },
     "energy": {
         "product": "Commodity/Energy",
         "en": "Energy",
-        "label": "الطاقة / Energy",
+        "label": "Energy",
         "aliases": [
             "energy", "oil", "crude", "crude oil", "gas", "natural gas",
-            "gasoline", "electricity", "coal", "طاقة", "الطاقة", "نفط",
-            "النفط", "خام", "الخام", "غاز", "الغاز", "كهرباء", "فحم",
+            "gasoline", "electricity", "coal",
         ],
     },
     "agriculture": {
         "product": "Commodity/Agriculture",
         "en": "Agriculture",
-        "label": "الزراعة / Agriculture",
+        "label": "Agriculture",
         "aliases": [
             "agriculture", "agricultural", "agri", "farming",
-            "زراعة", "الزراعة", "زراعي", "محاصيل", "المحاصيل", "منتجات زراعية",
         ],
     },
     "metals": {
         "product": "Commodity/Metals",
         "en": "Metals",
-        "label": "المعادن / Metals",
+        "label": "Metals",
         "aliases": [
             "metals", "metal", "metals futures",
-            "معادن", "المعادن", "معدن",
         ],
     },
     "weather": {
         "product": "Commodity/Weather",
         "en": "Weather",
-        "label": "الطقس / Weather",
+        "label": "Weather",
         "aliases": [
             "weather", "weather futures", "temperature",
-            "طقس", "الطقس", "مناخ", "المناخ", "حرارة", "الحرارة",
         ],
     },
     "building_materials": {
         "product": "Commodity/BuildingMaterials",
         "en": "Building materials",
-        "label": "مواد البناء / Building materials",
+        "label": "Building materials",
         "aliases": [
             "building materials", "building material", "construction",
             "lumber", "timber", "building_materials", "building-materials",
-            "مواد البناء", "مواد بناء", "البناء", "خشب", "الأخشاب", "أخشاب",
         ],
     },
     "chemicals": {
         "product": "Commodity/Chemicals",
         "en": "Chemicals",
-        "label": "المواد الكيميائية / Chemicals",
+        "label": "Chemicals",
         "aliases": [
             "chemicals", "chemical", "chemical futures",
-            "مواد كيميائية", "المواد الكيميائية", "كيماويات", "الكيماويات",
-            "كيمياء",
         ],
     },
 }
@@ -367,7 +355,7 @@ def list_futures_categories():
     """Return the supported futures categories as a list of dicts.
 
     Each entry has ``id``, ``product`` (TradingView's hierarchy prefix),
-    ``en``, ``label`` (Arabic/English) and ``aliases``.
+    ``en``, ``label`` and ``aliases``.
     """
     return [
         {
@@ -636,25 +624,23 @@ def search_futures(
     """Search **futures contracts** by country, exchange and category.
 
     Args:
-        text: optional search text (symbol or description, English/Arabic).
+        text: optional search text (symbol or description).
             May be empty -- the other filters then act as a browse query.
         exchange: optional exchange id to restrict to, e.g. ``"NYMEX"``,
             ``"CME"``, ``"EUREX"`` (matched case sensitively server-side,
             with an automatic upper-cased retry).
-        category: optional futures category, in English or Arabic:
-            ``single_stock/الأسهم الفردية``,
-            ``world_indices/المؤشرات العالمية``, ``currencies/العملات``,
-            ``interest_rates/أسعار الفائدة``, ``energy/الطاقة``,
-            ``agriculture/الزراعة``, ``metals/المعادن``, ``weather/الطقس``,
-            ``building_materials/مواد البناء``, ``chemicals/المواد الكيميائية``.
+        category: optional futures category:
+            ``single_stock``, ``world_indices``, ``currencies``,
+            ``interest_rates``, ``energy``, ``agriculture``, ``metals``,
+            ``weather``, ``building_materials``, ``chemicals``.
         product: optional sub-category path from TradingView's taxonomy,
             e.g. ``"Commodity/Metals/Precious/Gold"`` or
             ``"Commodity/Energy/Oil"`` (prefix match: everything *under* it).
             When both ``category`` and ``product`` are given, ``product`` must
             belong to ``category``.
         country: optional ISO-3166 alpha-2 code (``"SA"``) or country name
-            (``"السعودية"`` / ``"Saudi Arabia"``).  Country is not part of the
-            futures screener, so it goes through TradingView's symbol search
+            (``"Saudi Arabia"``).  Country is not part of the futures
+            screener, so it goes through TradingView's symbol search
             (which caps a single query at 50 instruments).
         limit: maximum number of records (1..50, larger values are clamped).
         continuous_only: when browsing without ``text``/``country``, return

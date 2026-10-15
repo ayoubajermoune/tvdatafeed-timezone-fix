@@ -13,7 +13,7 @@ The module is intentionally free of any dependency on :class:`TvDatafeed`
 so that symbols can be looked up without creating a client object::
 
     from tvDatafeed import search_symbol
-    search_symbol("gold", type="السلع", country="السعودية")
+    search_symbol("gold", type="commodity", country="SA")
 """
 
 from __future__ import annotations
@@ -64,79 +64,76 @@ ASSET_TYPES = {
     "stock": {
         "server": "stock",
         "expected": {"stock", "dr"},
-        "label": "الأسهم / Stocks",
-        "aliases": ["stocks", "share", "shares", "equity", "equities", "أسهم", "اسهم", "سهم", "الأسهم"],
+        "label": "Stocks",
+        "aliases": ["stocks", "share", "shares", "equity", "equities"],
     },
     "commodity": {
         "server": "cfd",
         "filter": "commodity",
         "expected": {"commodity"},
-        "label": "السلع / Commodities",
-        "aliases": ["commodities", "commodity", "commoditie", "سلع", "السلع", "سلعة", "السلعة"],
+        "label": "Commodities",
+        "aliases": ["commodities", "commodity", "commoditie"],
     },
     "bond": {
         "server": "bond",
         "expected": {"bond"},
-        "label": "السندات / Bonds",
-        "aliases": ["bonds", "bond", "سندات", "السندات", "سند", "السند"],
+        "label": "Bonds",
+        "aliases": ["bonds", "bond"],
     },
     "forex": {
         "server": "forex",
         "expected": {"forex"},
-        "label": "الفوريكس / Forex",
-        "aliases": ["fx", "currency", "currencies", "فوريكس", "فوركس", "الفوريكس", "الفوركس", "عملات", "العملات"],
+        "label": "Forex",
+        "aliases": ["fx", "currency", "currencies"],
     },
     "index": {
         "server": "index",
         "expected": {"index"},
-        "label": "المؤشرات / Indices",
-        "aliases": ["indices", "indexes", "مؤشرات", "المؤشرات", "مؤشر", "المؤشر"],
+        "label": "Indices",
+        "aliases": ["indices", "indexes"],
     },
     "crypto": {
         "server": "crypto",
         # crypto instruments are typed spot/swap/index/commodity... -> no
         # reliable local filter; trust the server's screen.
-        "label": "العملات الرقمية / Crypto",
-        "aliases": [
-            "cryptocurrency", "cryptocurrencies", "كريبتو",
-            "عملات رقمية", "العملات الرقمية", "الرقمية",
-        ],
+        "label": "Crypto",
+        "aliases": ["cryptocurrency", "cryptocurrencies"],
     },
     "futures": {
         "server": "futures",
         "expected": {"futures"},
-        "label": "العقود الآجلة / Futures",
-        "aliases": ["future", "عقود آجلة", "العقود الآجلة", "آجلة", "مستقبلية", "المستقبلية", "فواتشر"],
+        "label": "Futures",
+        "aliases": ["future"],
     },
     "etf": {
         "server": "etf",
         "expected": {"fund"},
-        "label": "صناديق ETF",
-        "aliases": ["etfs", "exchange traded fund", "إي تي إف", "صناديق مؤشرات"],
+        "label": "ETFs",
+        "aliases": ["etfs", "exchange traded fund"],
     },
     "fund": {
         "server": "funds",
         "expected": {"fund"},
-        "label": "الصناديق / Funds",
-        "aliases": ["funds", "mutual fund", "mutual funds", "صناديق", "الصناديق", "صندوق"],
+        "label": "Funds",
+        "aliases": ["funds", "mutual fund", "mutual funds"],
     },
     "cfd": {
         "server": "cfd",
         # spot CFDs are typed commodity/forex/index -> trust the server's screen.
-        "label": "عقود الفروقات / CFDs",
-        "aliases": ["cfds", "عقود فروقات", "عقود الفروقات", "فروقات", "الفروقات"],
+        "label": "CFDs",
+        "aliases": ["cfds"],
     },
     "option": {
         "server": "options",
         "expected": {"option"},
-        "label": "الخيارات / Options",
-        "aliases": ["options", "خيارات", "الخيارات"],
+        "label": "Options",
+        "aliases": ["options"],
     },
     "warrant": {
         "server": "warrant",
         "expected": {"warrant"},
-        "label": "الأسهم الواردة / Warrants",
-        "aliases": ["warrants", "شهادات", "شهادة"],
+        "label": "Warrants",
+        "aliases": ["warrants"],
     },
 }
 
@@ -153,74 +150,72 @@ _TYPE_HELP = ", ".join(f"{name} ({spec['label']})" for name, spec in ASSET_TYPES
 # Countries
 # ---------------------------------------------------------------------------
 # Accepts either an ISO-3166 alpha-2 code ("SA", "us") or a country name in
-# Arabic/English.  Filtering by country is optional: commodities, forex and
-# crypto records frequently carry no country at all and are returned with
+# English.  Filtering by country is optional: commodities, forex and crypto
+# records frequently carry no country at all and are returned with
 # ``country=None``.
 COUNTRY_ALIASES = {
     # Middle East & North Africa
-    "السعودية": "SA", "المملكة العربية السعودية": "SA", "saudi arabia": "SA", "ksa": "SA",
-    "مصر": "EG", "egypt": "EG",
-    "الإمارات": "AE", "الامارات": "AE", "الإمارات العربية المتحدة": "AE",
+    "saudi arabia": "SA", "ksa": "SA",
+    "egypt": "EG",
     "uae": "AE", "united arab emirates": "AE",
-    "قطر": "QA", "qatar": "QA",
-    "الكويت": "KW", "kuwait": "KW",
-    "البحرين": "BH", "bahrain": "BH",
-    "عمان": "OM", "عُمان": "OM", "oman": "OM",
-    "الأردن": "JO", "الاردن": "JO", "jordan": "JO",
-    "المغرب": "MA", "morocco": "MA",
-    "تونس": "TN", "tunisia": "TN",
-    "الجزائر": "DZ", "algeria": "DZ",
-    "العراق": "IQ", "iraq": "IQ",
-    "لبنان": "LB", "lebanon": "LB",
-    "سوريا": "SY", "syria": "SY",
-    "اليمن": "YE", "yemen": "YE",
-    "ليبيا": "LY", "libya": "LY",
-    "السودان": "SD", "sudan": "SD",
-    "فلسطين": "PS", "palestine": "PS",
+    "qatar": "QA",
+    "kuwait": "KW",
+    "bahrain": "BH",
+    "oman": "OM",
+    "jordan": "JO",
+    "morocco": "MA",
+    "tunisia": "TN",
+    "algeria": "DZ",
+    "iraq": "IQ",
+    "lebanon": "LB",
+    "syria": "SY",
+    "yemen": "YE",
+    "libya": "LY",
+    "sudan": "SD",
+    "palestine": "PS",
     # Major markets
-    "أمريكا": "US", "الولايات المتحدة": "US", "الولايات المتحدة الأمريكية": "US",
     "usa": "US", "united states": "US", "united states of america": "US",
-    "بريطانيا": "GB", "المملكة المتحدة": "GB", "uk": "GB", "united kingdom": "GB", "england": "GB",
-    "ألمانيا": "DE", "المانيا": "DE", "germany": "DE",
-    "فرنسا": "FR", "france": "FR",
-    "إيطاليا": "IT", "ايطاليا": "IT", "italy": "IT",
-    "إسبانيا": "ES", "اسبانيا": "ES", "spain": "ES",
-    "هولندا": "NL", "netherlands": "NL",
-    "سويسرا": "CH", "switzerland": "CH",
-    "السويد": "SE", "sweden": "SE",
-    "النرويج": "NO", "norway": "NO",
-    "الدنمارك": "DK", "denmark": "DK",
-    "فنلندا": "FI", "finland": "FI",
-    "بلجيكا": "BE", "belgium": "BE",
-    "النمسا": "AT", "austria": "AT",
-    "البرتغال": "PT", "portugal": "PT",
-    "اليونان": "GR", "greece": "GR",
-    "أيرلندا": "IE", "ايرلندا": "IE", "ireland": "IE",
-    "بولندا": "PL", "poland": "PL",
-    "روسيا": "RU", "russia": "RU",
-    "تركيا": "TR", "turkey": "TR", "turkiye": "TR",
-    "الصين": "CN", "china": "CN",
-    "اليابان": "JP", "japan": "JP",
-    "كوريا": "KR", "كوريا الجنوبية": "KR", "south korea": "KR", "korea": "KR",
-    "هونغ كونغ": "HK", "hong kong": "HK",
-    "تايوان": "TW", "taiwan": "TW",
-    "سنغافورة": "SG", "singapore": "SG",
-    "الهند": "IN", "india": "IN",
-    "باكستان": "PK", "pakistan": "PK",
-    "إندونيسيا": "ID", "اندونيسيا": "ID", "indonesia": "ID",
-    "ماليزيا": "MY", "malaysia": "MY",
-    "تايلاند": "TH", "thailand": "TH",
-    "الفلبين": "PH", "philippines": "PH",
-    "فيتنام": "VN", "vietnam": "VN",
-    "إسرائيل": "IL", "اسرائيل": "IL", "israel": "IL",
-    "البرازيل": "BR", "brazil": "BR",
-    "كندا": "CA", "canada": "CA",
-    "أستراليا": "AU", "استراليا": "AU", "australia": "AU",
-    "نيوزيلندا": "NZ", "new zealand": "NZ",
-    "جنوب أفريقيا": "ZA", "جنوب افريقيا": "ZA", "south africa": "ZA",
-    "المكسيك": "MX", "mexico": "MX",
-    "نيجيريا": "NG", "nigeria": "NG",
-    "كينيا": "KE", "kenya": "KE",
+    "uk": "GB", "united kingdom": "GB", "england": "GB",
+    "germany": "DE",
+    "france": "FR",
+    "italy": "IT",
+    "spain": "ES",
+    "netherlands": "NL",
+    "switzerland": "CH",
+    "sweden": "SE",
+    "norway": "NO",
+    "denmark": "DK",
+    "finland": "FI",
+    "belgium": "BE",
+    "austria": "AT",
+    "portugal": "PT",
+    "greece": "GR",
+    "ireland": "IE",
+    "poland": "PL",
+    "russia": "RU",
+    "turkey": "TR", "turkiye": "TR",
+    "china": "CN",
+    "japan": "JP",
+    "korea": "KR", "south korea": "KR",
+    "hong kong": "HK",
+    "taiwan": "TW",
+    "singapore": "SG",
+    "india": "IN",
+    "pakistan": "PK",
+    "indonesia": "ID",
+    "malaysia": "MY",
+    "thailand": "TH",
+    "philippines": "PH",
+    "vietnam": "VN",
+    "israel": "IL",
+    "brazil": "BR",
+    "canada": "CA",
+    "australia": "AU",
+    "new zealand": "NZ",
+    "south africa": "ZA",
+    "mexico": "MX",
+    "nigeria": "NG",
+    "kenya": "KE",
 }
 
 # normalised lookup: casefolded name -> ISO code
@@ -268,14 +263,14 @@ def _resolve_country(value):
         raise ValueError(
             f"country must be a string, got {type(value).__name__}. "
             "Use an ISO-3166 alpha-2 code such as 'SA' or 'US', or a country "
-            "name such as 'السعودية' / 'Saudi Arabia'."
+            "name such as 'Saudi Arabia'."
         )
 
     raw = value.strip()
     if not raw:
         raise ValueError(
             "country must not be empty. Use an ISO-3166 alpha-2 code such as "
-            "'SA' or 'US', or a country name such as 'السعودية' / 'Saudi Arabia'."
+            "'SA' or 'US', or a country name such as 'Saudi Arabia'."
         )
 
     if len(raw) == 2 and raw.isalpha():
@@ -285,7 +280,7 @@ def _resolve_country(value):
     if code is None:
         raise ValueError(
             f"Unknown country {value!r}. Use an ISO-3166 alpha-2 code such as "
-            "'SA' or 'US', or a country name such as 'السعودية' / 'Saudi Arabia'."
+            "'SA' or 'US', or a country name such as 'Saudi Arabia'."
         )
     return code
 
@@ -444,21 +439,18 @@ def search_symbol(
     """Search TradingView symbols -- **no account / login required**.
 
     Args:
-        text: symbol name or description, e.g. ``"XAUUSD"``, ``"أرامكو"``.
+        text: symbol name or description, e.g. ``"XAUUSD"``, ``"gold"``.
         exchange: optional exchange id to restrict the search to, e.g.
             ``"BLACKBULL"`` or ``"TADAWUL"`` (ids are case sensitive on
             TradingView's side; an upper-cased retry is done automatically
             when the first attempt returns nothing).
-        type: optional asset type, in English or Arabic:
-            ``stock/الأسهم``, ``commodity/السلع``, ``bond/السندات``,
-            ``forex/الفوريكس``, ``index/المؤشرات``,
-            ``crypto/العملات الرقمية``, ``futures/العقود الآجلة``,
-            ``etf``, ``fund/الصناديق``, ``cfd/عقود الفروقات``,
-            ``option/الخيارات``, ``warrant``.
+        type: optional asset type:
+            ``stock``, ``commodity``, ``bond``, ``forex``, ``index``,
+            ``crypto``, ``futures``, ``etf``, ``fund``, ``cfd``,
+            ``option``, ``warrant``.
         country: optional ISO-3166 alpha-2 code (``"SA"``) or country name
-            (``"السعودية"``, ``"Saudi Arabia"``).  Optional by nature:
-            commodities/forex/crypto results simply come back with
-            ``country=None``.
+            (``"Saudi Arabia"``).  Optional by nature: commodities/forex/
+            crypto results simply come back with ``country=None``.
         limit: maximum number of records (1..50; TradingView never returns
             more than 50 per request, larger values are clamped).
         lang: interface language passed to TradingView (``"en"``, ``"ar"``...).

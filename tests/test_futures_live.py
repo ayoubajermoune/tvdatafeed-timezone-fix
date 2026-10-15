@@ -64,30 +64,6 @@ def test_the_ten_categories_are_listable():
 
 
 # ---------------------------------------------------------------------------
-# Arabic category names
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize(
-    "arabic,expected",
-    [
-        ("الطاقة", "energy"),
-        ("المعادن", "metals"),
-        ("الطقس", "weather"),
-        ("الزراعة", "agriculture"),
-        ("العملات", "currencies"),
-        ("المؤشرات العالمية", "world_indices"),
-        ("أسعار الفائدة", "interest_rates"),
-        ("مواد البناء", "building_materials"),
-        ("المواد الكيميائية", "chemicals"),
-        ("الأسهم الفردية", "single_stock"),
-    ],
-)
-def test_arabic_category_names_work(arabic, expected):
-    out = search_futures(category=arabic, limit=5)
-    assert out
-    assert all(r["category"] == expected for r in out)
-
-
-# ---------------------------------------------------------------------------
 # exchange filtering (exact + lower-case convenience fallback)
 # ---------------------------------------------------------------------------
 def test_exchange_filter_is_exact():
@@ -134,8 +110,8 @@ def test_country_and_category_combine():
         assert record["full_name"] == f"{record['exchange_id']}:{record['symbol']}"
 
 
-def test_country_in_arabic_works():
-    out = search_futures(country="الهند", limit=10)
+def test_country_english_name_works():
+    out = search_futures(country="India", limit=10)
     assert out
     assert all(r["country"] == "IN" for r in out)
 

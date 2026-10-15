@@ -458,10 +458,10 @@ class TvDatafeed:
         Args:
             text: symbol name or description.
             exchange: optional exchange id, e.g. ``"BLACKBULL"``.
-            type: optional asset type in English or Arabic
-                (``"السلع"``, ``"السندات"``, ``"الفوريكس"``, ``"stock"``...).
+            type: optional asset type
+                (``"commodity"``, ``"bond"``, ``"forex"``, ``"stock"``...).
             country: optional ISO-3166 alpha-2 code or country name
-                (``"السعودية"``, ``"US"``...).
+                (``"SA"``, ``"US"``...).
             limit: maximum number of records (1..50).
             lang: TradingView interface language.
             timeout: per-request timeout in seconds.
@@ -506,8 +506,8 @@ class TvDatafeed:
         Args:
             text: optional search text (symbol or description).
             exchange: optional exchange id, e.g. ``"NYMEX"``.
-            category: optional futures category in English or Arabic
-                (``"الطاقة"``, ``"metals"``, ``"weather"``...).
+            category: optional futures category
+                (``"energy"``, ``"metals"``, ``"weather"``...).
             product: optional sub-category path, e.g.
                 ``"Commodity/Metals/Precious/Gold"``.
             country: optional ISO-3166 alpha-2 code or country name.

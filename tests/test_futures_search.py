@@ -171,7 +171,7 @@ def test_scan_timeout_and_proxies_are_forwarded():
 
 
 # ---------------------------------------------------------------------------
-# 2) categories: English + Arabic aliases
+# 2) categories: aliases become the anchored product regex
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "given,expected_regex",
@@ -179,29 +179,18 @@ def test_scan_timeout_and_proxies_are_forwarded():
         ("single_stock", "^Financial/Equity"),
         ("Single stock", "^Financial/Equity"),
         ("single-stock", "^Financial/Equity"),
-        ("أسهم فردية", "^Financial/Equity"),
-        ("الأسهم الفردية", "^Financial/Equity"),
         ("world_indices", "^Financial/Index"),
         ("World indices", "^Financial/Index"),
-        ("المؤشرات العالمية", "^Financial/Index"),
         ("currencies", "^Financial/Currency"),
-        ("العملات", "^Financial/Currency"),
         ("interest_rates", "^Financial/InterestRate"),
-        ("أسعار الفائدة", "^Financial/InterestRate"),
         ("energy", "^Commodity/Energy"),
-        ("الطاقة", "^Commodity/Energy"),
         ("ENERGY", "^Commodity/Energy"),
         ("agriculture", "^Commodity/Agriculture"),
-        ("الزراعة", "^Commodity/Agriculture"),
         ("metals", "^Commodity/Metals"),
-        ("المعادن", "^Commodity/Metals"),
         ("weather", "^Commodity/Weather"),
-        ("الطقس", "^Commodity/Weather"),
         ("building_materials", "^Commodity/BuildingMaterials"),
         ("building-materials", "^Commodity/BuildingMaterials"),
-        ("مواد البناء", "^Commodity/BuildingMaterials"),
         ("chemicals", "^Commodity/Chemicals"),
-        ("المواد الكيميائية", "^Commodity/Chemicals"),
     ],
 )
 def test_category_aliases_become_product_regex(given, expected_regex):
@@ -224,7 +213,7 @@ def test_unknown_category_raises_with_supported_list():
     with pytest.raises(ValueError) as exc:
         search_futures(category="crypto futures")
     msg = str(exc.value)
-    assert "energy" in msg and "الطاقة" in msg and "chemicals" in msg
+    assert "energy" in msg and "Energy" in msg and "chemicals" in msg
 
 
 @pytest.mark.parametrize("bad", ["", "   ", "nope"])
@@ -504,7 +493,7 @@ def test_text_search_uses_symbol_search_with_type_futures():
 
 def test_country_is_resolved_to_iso_and_forwarded():
     _, get, _ = _call_text(get_records=[_search_record(country="SA")],
-                           country="السعودية", scan_rows=[_scan_row("CL1!")])
+                           country="Saudi Arabia", scan_rows=[_scan_row("CL1!")])
     assert get.call_args[1]["params"]["country"] == "SA"
 
 
@@ -640,7 +629,7 @@ def test_instance_method_reuses_instance_proxies():
 def test_instance_method_forwards_filters():
     tv = _client()
     with mock.patch(POST_TARGET, return_value=_resp(_scan_payload([]))) as post:
-        tv.search_futures(exchange="COMEX", category="المعادن", limit=5,
+        tv.search_futures(exchange="COMEX", category="metals", limit=5,
                           continuous_only=False)
     filters = _filters(_body(post))
     assert _right_of(filters, "product") == "^Commodity/Metals"
