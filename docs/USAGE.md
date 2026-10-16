@@ -447,6 +447,106 @@ months = search_futures(category="weather", continuous_only=False, limit=20)
 
 ---
 
+### قائمة الدول المدعومة (Supported countries)
+
+يمرّر المعامل `country` في الدالتين `search_symbol` و`search_futures` إلى نفس طرفية بحث الرموز في TradingView، ويمكن إدخاله بإحدى صورتين:
+
+1. **رمز ISO-3166 alpha-2** بأحرف كبيرة أو صغيرة (مثل `"SA"` أو `"sa"` أو `"US"`).
+2. **اسم الدولة بالإنجليزية** (مثل `"Saudi Arabia"` أو `"Bulgaria"`) — يُحوَّل داخلياً إلى رمز ISO.
+
+الجدول التالي يجمع كل الدول التي تحمل رمزاً في TradingView مع رمزها ISO واسمها الإنجليزي، ويبيّن أي دالة تُرجع لها نتائج فعلية عند الفلترة بالدولة، مع مثال رمز حقيقي.
+
+| الدولة | الاسم الإنجليزي | رمز ISO | `search_symbol` | `search_futures` | مثال (بورصة:رمز) |
+|---|---|---|---|---|---|
+| **أمريكا الشمالية** | | | | | |
+| الولايات المتحدة الأمريكية | United States | `US` | ✅ | ✅ | `AMEX:SPY` |
+| كندا | Canada | `CA` | ✅ | ✅ | `TSX:SHOP` |
+| **أوروبا** | | | | | |
+| النمسا | Austria | `AT` | ✅ | — | `VIE:FTG` |
+| بلجيكا | Belgium | `BE` | ✅ | ✅ | `EURONEXT:ABI` |
+| بلغاريا | Bulgaria | `BG` | ✅ | — | `BSESOF:RBL` |
+| كرواتيا | Croatia | `HR` | ✅ | — | `ZSE:KOEI` |
+| قبرص | Cyprus | `CY` | ✅ | — | `CSECY:BOCH` |
+| جمهورية التشيك | Czech Republic | `CZ` | ✅ | — | `PSECZ:CSG` |
+| الدانمارك | Denmark | `DK` | ✅ | ✅ | `OMXCOP:NOVO_B` |
+| إستونيا | Estonia | `EE` | ✅ | — | `OMXTSE:LHV1T` |
+| الاتحاد الأوروبي | European Union | `EU` | ✅ <sup>1</sup> | ✅ | `EUREX:FDAX` |
+| فنلندا | Finland | `FI` | ✅ | ✅ | `OMXHEX:NOKIA` |
+| فرنسا | France | `FR` | ✅ | ✅ | `EURONEXT:MC` |
+| ألمانيا | Germany | `DE` | ✅ | ✅ | `XETR:RHM` |
+| اليونان | Greece | `GR` | ✅ | — | `ATHEX:ALWN` |
+| المجر | Hungary | `HU` | ✅ | ✅ | `BET:OTP` |
+| آيسلندا | Iceland | `IS` | ✅ | — | `OMXICE:ALVO` |
+| أيرلندا | Ireland | `IE` | ✅ | — | `EURONEXT:RYA` |
+| إيطاليا | Italy | `IT` | ✅ | ✅ | `MIL:RACE` |
+| لاتفيا | Latvia | `LV` | ✅ | — | `OMXRSE:EGG` |
+| ليتوانيا | Lithuania | `LT` | ✅ | — | `OMXVSE:IGN1L` |
+| لوكسمبورغ | Luxembourg | `LU` | ✅ | — | `LUXSE:LU2420245917` |
+| هولندا | Netherlands | `NL` | ✅ | ✅ | `EURONEXT:ASML` |
+| النرويج | Norway | `NO` | ✅ | ✅ | `OSL:KOG` |
+| بولندا | Poland | `PL` | ✅ | ✅ | `GPW:XTB` |
+| البرتغال | Portugal | `PT` | ✅ | ✅ | `EURONEXT:BCP` |
+| رومانيا | Romania | `RO` | ✅ | — | `BVB:TVBETETF` |
+| روسيا | Russia | `RU` | ✅ | ✅ | `RUS:GAZP` |
+| صربيا | Serbia | `RS` | ✅ | — | `BELEX:PUUE` |
+| سلوفاكيا | Slovakia | `SK` | ✅ | — | `BSSE:1ACI001E` |
+| سلوفينيا | Slovenia | `SI` | ✅ | — | `LJSE:KRKG` |
+| إسبانيا | Spain | `ES` | ✅ | — | `BME:SAN` |
+| السويد | Sweden | `SE` | ✅ | ✅ | `OMXSTO:SIVE` |
+| سويسرا | Switzerland | `CH` | ✅ | — | `SIX:NESN` |
+| تركيا | Turkey | `TR` | ✅ | ✅ | `BIST:THYAO` |
+| المملكة المتحدة | United Kingdom | `GB` | ✅ | ✅ | `LSE:VWRA` |
+| **الشرق الأوسط / أفريقيا** | | | | | |
+| البحرين | Bahrain | `BH` | ✅ | — | `BAHRAIN:NBB` |
+| مصر | Egypt | `EG` | ✅ | — | `EGX:COMI` |
+| إسرائيل | Israel | `IL` | ✅ | — | `TASE:GOLD` |
+| كينيا | Kenya | `KE` | ✅ | — | `NSEKE:SCOM` |
+| الكويت | Kuwait | `KW` | ✅ | — | `KSE:KFH` |
+| المغرب | Morocco | `MA` | ✅ | — | `CSEMA:GTM` |
+| نيجيريا | Nigeria | `NG` | ✅ | — | `NSENG:GTCO` |
+| قطر | Qatar | `QA` | ✅ | — | `QSE:MARK` |
+| المملكة العربية السعودية | Saudi Arabia | `SA` | ✅ | — | `TADAWUL:2222` |
+| جنوب أفريقيا | South Africa | `ZA` | ✅ | — | `JSE:SOL` |
+| تونس | Tunisia | `TN` | ✅ | — | `BVMT:BNA` |
+| الإمارات العربية المتحدة | United Arab Emirates | `AE` | ✅ | ✅ | `DFM:EMAAR` |
+| **المكسيك وأمريكا الجنوبية** | | | | | |
+| الأرجنتين | Argentina | `AR` | ✅ | ✅ | `BCBA:TSMC` |
+| البرازيل | Brazil | `BR` | ✅ | ✅ | `BMFBOVESPA:VALE3` |
+| تشيلي | Chile | `CL` | ✅ | — | `BCS:LTM` |
+| كولومبيا | Colombia | `CO` | ✅ | — | `BVC:ECOPETROL` |
+| المكسيك | Mexico | `MX` | ✅ | — | `BMV:CEMEX/CPO` |
+| بيرو | Peru | `PE` | ✅ | — | `BVL:CREDITC1` |
+| فنزويلا | Venezuela | `VE` | ✅ | — | `BVCV:SVS` |
+| **آسيا / المحيط الهادئ** | | | | | |
+| أستراليا | Australia | `AU` | ✅ | ✅ | `ASX:BHP` |
+| بنجلاديش | Bangladesh | `BD` | ✅ | — | `DSEBD:BRACBANK` |
+| هونغ كونغ، الصين | Hong Kong, China | `HK` | ✅ | ✅ | `HKEX:1810` |
+| الهند | India | `IN` | ✅ | ✅ | `NSE:RELIANCE` |
+| إندونيسيا | Indonesia | `ID` | ✅ | — | `IDX:BBCA` |
+| اليابان | Japan | `JP` | ✅ | ✅ | `TSE:285A` |
+| بر الصين الرئيسي | Mainland China | `CN` | ✅ | ✅ | `SSE:688825` |
+| ماليزيا | Malaysia | `MY` | ✅ | ✅ | `MYX:MAYBANK` |
+| نيوزيلندا | New Zealand | `NZ` | ✅ | ✅ | `NZX:EBO` |
+| باكستان | Pakistan | `PK` | ✅ | — | `PSX:PRL` |
+| الفلبين | Philippines | `PH` | ✅ | — | `PSE:ICT` |
+| سنغافورة | Singapore | `SG` | ✅ | ✅ | `SGX:D05` |
+| كوريا الجنوبية | South Korea | `KR` | ✅ | ✅ | `KRX:000660` |
+| سريلانكا | Sri Lanka | `LK` | ✅ | — | `CSELK:SAMP.N0000` |
+| تايوان، الصين | Taiwan, China | `TW` | ✅ | ✅ | `TWSE:2330` |
+| تايلاند | Thailand | `TH` | ✅ | ✅ | `SET:DELTA` |
+| فيتنام | Vietnam | `VN` | ✅ | ✅ | `HOSE:FPT` |
+
+**ملاحظات:**
+
+- <sup>1</sup> `EU` رمز خاص بالاتحاد الأوروبي عند TradingView (ليس دولة ISO بالمعنى الدقيق). لا يحمل أي ورقة **أسهم** (لذلك `search_symbol("...", country="EU", type="stock")` يعيد `[]`)، لكنه يحمل **عقوداً آجلة** (مثل `EUREX:FDAX`)، لذا يعمل معه `search_symbol(..., type="futures")` و`search_futures(country="EU")`.
+- عمود `search_symbol` يعني أن فلترة الدولة تعمل وأن الطرفية تُرجع أدوات مُوسمة بهذه الدولة. تذكّر أن `search_symbol` **يتطلّب نص بحث غير فارغ** (`text`)، بينما `search_futures` يستطيع الاستعراض بـ`country` وحده (`text=""`).
+- عمود `search_futures` يشير إلى وجود **عقود آجلة** موسومة بهذه الدولة في الطرفية؛ الدول التي عليها `—` لا تحتوي أدوات آجلة في TradingView حالياً، فتُعيد `search_futures(country=...)` قائمة فارغة `[]`.
+- للدول التي لا تعرض نتائج في وضع الاستعراض (نص فارغ)، استخدم نصاً من اسم الرمز أو وصفه (مثل `search_symbol("2222", country="SA")` أو `search_symbol("bank", country="CN")`).
+- أي رمز حرفين غير مذكور هنا (مثل `"XX"`) لا يرمي خطأ، بل يُمرَّر للطرفية ويعيد قائمة فارغة `[]`.
+- القائمة مبنية على تحقق حيّ من TradingView؛ وقد تتغير تغطية الدول مع الوقت.
+
+---
+
 ## 3) مثال مقارنة قبل / بعد
 
 ```python
@@ -484,8 +584,10 @@ pytest tests -v
 اختبارات **حية** (اختيارية) تتحقق من صحة البيانات الفعلية من TradingView بدون تسجيل دخول:
 
 ```bash
-TV_LIVE=1 pytest tests/test_search_live.py -v
+TV_LIVE=1 pytest tests/test_search_live.py tests/test_futures_live.py tests/test_countries_live.py -v
 ```
+
+يتحقق `tests/test_countries_live.py` من **تطابق مدخل `country` مع مخرج الدالتين** لكل الدول المذكورة في «قائمة الدول المدعومة»، ومن أن الأسماء الإنجليزية تُحلّ إلى رموز ISO الصحيحة.
 
 ---
 

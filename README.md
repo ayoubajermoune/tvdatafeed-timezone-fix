@@ -179,6 +179,19 @@ data = tv.get_hist(symbol=hit["symbol"], exchange=hit["exchange_id"], n_bars=10)
 
 التفاصيل الكاملة (جداول المرادفات لكل الأنواع والدول، بنية الأخطاء، أمثلة) في [`docs/USAGE.md`](docs/USAGE.md) وقسم 5 من [`examples/example_usage.py`](examples/example_usage.py).
 
+#### الدول المدعومة (`country`)
+
+يقبل المعامل `country` **رمز ISO-3166 alpha-2** (`"SA"`, `"US"`...) أو **الاسم الإنجليزي** (`"Saudi Arabia"`, `"Bulgaria"`...). الدول التالية مدعومة في `search_symbol` (كلها، مع مراعاة أن `text` مطلوب) و`search_futures` (الدول التي تملك عقوداً آجلة):
+
+- **أمريكا الشمالية:** `US` United States، `CA` Canada
+- **أوروبا:** `AT` Austria، `BE` Belgium، `BG` Bulgaria، `HR` Croatia، `CY` Cyprus، `CZ` Czech Republic، `DK` Denmark، `EE` Estonia، `EU` European Union، `FI` Finland، `FR` France، `DE` Germany، `GR` Greece، `HU` Hungary، `IS` Iceland، `IE` Ireland، `IT` Italy، `LV` Latvia، `LT` Lithuania، `LU` Luxembourg، `NL` Netherlands، `NO` Norway، `PL` Poland، `PT` Portugal، `RO` Romania، `RU` Russia، `RS` Serbia، `SK` Slovakia، `SI` Slovenia، `ES` Spain، `SE` Sweden، `CH` Switzerland، `TR` Turkey، `GB` United Kingdom
+- **الشرق الأوسط / أفريقيا:** `BH` Bahrain، `EG` Egypt، `IL` Israel، `KE` Kenya، `KW` Kuwait، `MA` Morocco، `NG` Nigeria، `QA` Qatar، `SA` Saudi Arabia، `ZA` South Africa، `TN` Tunisia، `AE` United Arab Emirates
+- **المكسيك وأمريكا الجنوبية:** `AR` Argentina، `BR` Brazil، `CL` Chile، `CO` Colombia، `MX` Mexico، `PE` Peru، `VE` Venezuela
+- **آسيا / المحيط الهادئ:** `AU` Australia، `BD` Bangladesh، `HK` Hong Kong، `IN` India، `ID` Indonesia، `JP` Japan، `CN` Mainland China، `MY` Malaysia، `NZ` New Zealand، `PK` Pakistan، `PH` Philippines، `SG` Singapore، `KR` South Korea، `LK` Sri Lanka، `TW` Taiwan، `TH` Thailand، `VN` Vietnam
+
+> الجدول الكامل (الاسم العربي والإنجليزي + رمز ISO + أي دالة تُرجع نتائج + مثال رمز لكل سوق) في قسم «قائمة الدول المدعومة» بملف [`docs/USAGE.md`](docs/USAGE.md).
+> `EU` (الاتحاد الأوروبي) رمز خاص: لا يحمل أسهماً لكنه يحمل عقوداً آجلة (`EUREX:FDAX`)، لذا يعمل مع `type="futures"` و`search_futures`. أي رمز حرفين غير مذكور (مثل `"XX"`) لا يرمي خطأ بل يعيد `[]`.
+
 ### البحث عن العقود الآجلة — `search_futures(...)` (بدون تسجيل دخول)
 
 بحث مخصّص في **العقود الآجلة (Futures)** حسب **الدولة + البورصة + التصنيف + التصنيف الفرعي**، **دون حساب أو إنشاء كائن**. يعتمد على مجمّع TradingView للعقود الآجلة (`scanner.tradingview.com/futures/scan`) الذي يوفّر عمود `product` الهرمي — وهو المصدر الرسمي للتصنيف — إضافةً إلى بحث الرموز نفسه عند الفلترة بالدولة:
@@ -296,7 +309,7 @@ pytest tests -v
 **اختبارات حية (اختيارية)** تتصل بـ TradingView فعلياً وتراجع صحة البيانات (بحث بالنوع/الدولة، نص بحث، تنزيل رمز مُرجَع عبر `get_hist`):
 
 ```bash
-TV_LIVE=1 pytest tests/test_search_live.py tests/test_futures_live.py -v
+TV_LIVE=1 pytest tests/test_search_live.py tests/test_futures_live.py tests/test_countries_live.py -v
 ```
 
 ---

@@ -238,11 +238,69 @@ def test_non_string_asset_type_raises():
         ("UAE", "AE"),
         ("usa", "US"),
         ("Germany", "DE"),
+        # names added to cover the full TradingView country list
+        ("Bulgaria", "BG"),
+        ("Croatia", "HR"),
+        ("Cyprus", "CY"),
+        ("Czech Republic", "CZ"),
+        ("Czechia", "CZ"),
+        ("Estonia", "EE"),
+        ("European Union", "EU"),
+        ("Hungary", "HU"),
+        ("Iceland", "IS"),
+        ("Latvia", "LV"),
+        ("Lithuania", "LT"),
+        ("Luxembourg", "LU"),
+        ("Romania", "RO"),
+        ("Serbia", "RS"),
+        ("Slovakia", "SK"),
+        ("Slovenia", "SI"),
+        ("Argentina", "AR"),
+        ("Chile", "CL"),
+        ("Colombia", "CO"),
+        ("Peru", "PE"),
+        ("Venezuela", "VE"),
+        ("Bangladesh", "BD"),
+        ("Sri Lanka", "LK"),
+        ("Mainland China", "CN"),
+        ("Hong Kong, China", "HK"),
+        ("Taiwan, China", "TW"),
     ],
 )
 def test_country_aliases_map_to_iso_codes(given, expected):
     _, get = _call(text="bank", country=given)
     assert get.call_args[1]["params"]["country"] == expected
+
+
+def test_every_country_alias_is_a_two_letter_iso_code():
+    """The alias table must only map names to valid alpha-2 codes."""
+    from tvDatafeed.search import COUNTRY_ALIASES
+
+    assert COUNTRY_ALIASES, "the country alias table must not be empty"
+    for name, code in COUNTRY_ALIASES.items():
+        assert name == name.strip().casefold(), name
+        assert len(code) == 2 and code.isalpha() and code.isupper(), (name, code)
+
+
+def test_every_documented_country_name_resolves():
+    """Every ISO code used by the docs is reachable, by code and by name."""
+    from tvDatafeed.search import COUNTRY_ALIASES, _resolve_country
+
+    documented = {
+        "US", "CA", "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "EU", "FI",
+        "FR", "DE", "GR", "HU", "IS", "IE", "IT", "LV", "LT", "LU", "NL", "NO",
+        "PL", "PT", "RO", "RU", "RS", "SK", "SI", "ES", "SE", "CH", "TR", "GB",
+        "BH", "EG", "IL", "KE", "KW", "MA", "NG", "QA", "SA", "ZA", "TN", "AE",
+        "AR", "BR", "CL", "CO", "MX", "PE", "VE", "AU", "BD", "HK", "IN", "ID",
+        "JP", "CN", "MY", "NZ", "PK", "PH", "SG", "KR", "LK", "TW", "TH", "VN",
+    }
+    # every documented ISO code is accepted verbatim
+    for code in documented:
+        assert _resolve_country(code) == code
+        assert _resolve_country(code.lower()) == code
+    # every documented ISO code has at least one English name alias
+    covered = set(COUNTRY_ALIASES.values())
+    assert documented <= covered, f"codes without an English name: {documented - covered}"
 
 
 @pytest.mark.parametrize("bad", ["XYZ", "Saudi", "", "   "])
