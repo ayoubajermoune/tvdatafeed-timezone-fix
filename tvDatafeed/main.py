@@ -524,11 +524,23 @@ class TvDatafeed:
                         try:
                             oi_series = oi_df['close'] if 'close' in oi_df.columns else oi_df.iloc[:, -1]
                             df = df.copy()
-                            df['open_interest'] = oi_series.reindex(df.index).values
+                            # Use exact values per timestamp when possible
+                            try:
+                                df['open_interest'] = oi_series.reindex(df.index).ffill().bfill().values
+                            except Exception:
+                                try:
+                                    df['open_interest'] = oi_series.reindex(df.index).values
+                                    # If all NaN, use last value
+                                    if df['open_interest'].isna().all():
+                                        df['open_interest'] = float(oi_series.dropna().iloc[-1]) if len(oi_series.dropna()) > 0 else None
+                                    else:
+                                        df['open_interest'] = df['open_interest'].ffill().bfill()
+                                except Exception:
+                                    df['open_interest'] = float(oi_series.dropna().iloc[-1]) if len(oi_series.dropna()) > 0 else None
                         except Exception:
                             try:
                                 df = df.copy()
-                                df['open_interest'] = oi_df['close'].values[:len(df)]
+                                df['open_interest'] = float(oi_df['close'].dropna().iloc[-1])
                             except Exception:
                                 pass
                 except Exception:
@@ -577,7 +589,7 @@ class TvDatafeed:
                     if oi_val is not None:
                         try:
                             df = df.copy()
-                            df['open_interest'] = oi_val
+                            df['open_interest'] = float(oi_val)
                         except Exception:
                             pass
         except Exception:
