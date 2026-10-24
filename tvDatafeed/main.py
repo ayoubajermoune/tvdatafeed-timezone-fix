@@ -474,62 +474,112 @@ class TvDatafeed:
             return df
         try:
             if _include_oi and fut_contract is not None:
-                oi_val = None
                 try:
-                    from . import futures as _futures_mod
+                    oi_df = None
                     sym_base = symbol
                     exch_base = exchange
-                    scan_sym = sym_base
-                    if isinstance(scan_sym, str) and not scan_sym.endswith('!'):
-                        scan_sym_try = f"{scan_sym}1!"
-                    else:
-                        scan_sym_try = scan_sym
-                    try:
-                        import requests
-                        body = {
-                            "columns": ["name", "exchange", "open_interest"],
-                            "filter": [{"left": "name", "operation": "equal", "right": scan_sym_try}],
-                            "range": [0, 10],
-                            "sort": {"sortBy": "name", "sortOrder": "asc"},
-                        }
-                        if exch_base:
-                            body["filter"].append({"left": "exchange", "operation": "equal", "right": str(exch_base).upper()})
-                        resp = requests.post(_futures_mod.SCAN_URL, json=body, headers=_futures_mod._SCAN_HEADERS,
-                                             timeout=10, proxies=getattr(self, "proxies", None))
-                        if resp.ok:
-                            payload = resp.json()
-                            data = payload.get("data") or []
-                            for item in data:
-                                if isinstance(item, dict):
-                                    vals = item.get("d")
-                                    if isinstance(vals, list):
-                                        rowmap = dict(zip(["name", "exchange", "open_interest"], vals))
-                                        if rowmap.get('open_interest') is not None:
-                                            oi_val = rowmap.get('open_interest')
-                                            break
-                    except Exception:
-                        pass
-                    if oi_val is None:
+                    oi_symbol_candidates = []
+                    if isinstance(sym_base, str):
+                        if fut_contract and isinstance(fut_contract, int):
+                            oi_symbol_candidates.append(f"{sym_base}{fut_contract}!_OI")
+                            oi_symbol_candidates.append(f"{sym_base}_OI")
+                        else:
+                            oi_symbol_candidates.append(f"{sym_base}_OI")
+                    for oi_sym_cand in oi_symbol_candidates:
                         try:
-                            rows, _ = _futures_mod._scan(
-                                [{"left": "name", "operation": "equal", "right": scan_sym_try}] + ([{"left": "exchange", "operation": "equal", "right": str(exch_base).upper()}] if exch_base else []),
-                                10,
-                                timeout=10,
-                                proxies=getattr(self, "proxies", None),
+                            oi_symbol_formatted = self.__format_symbol(oi_sym_cand, exch_base, contract=None)
+                        except Exception:
+                            continue
+                        try:
+                            self.__create_connection()
+                            self.__send_message("set_auth_token", [self.token])
+                            oi_chart = self.__generate_chart_session()
+                            oi_quote = self.__generate_session()
+                            self.__send_message("chart_create_session", [oi_chart, ""])
+                            self.__send_message("quote_create_session", [oi_quote])
+                            self.__send_message("quote_add_symbols", [oi_quote, oi_symbol_formatted, {"flags": ["force_permission"]}])
+                            self.__send_message("quote_fast_symbols", [oi_quote, oi_symbol_formatted])
+                            self.__send_message(
+                                "resolve_symbol",
+                                [oi_chart, "symbol_oi", '{"symbol":"' + oi_symbol_formatted + '","adjustment":"splits","session":"' + ('regular' if not extended_session else 'extended') + '"}'],
                             )
-                            if rows:
-                                r = rows[0]
-                                if r.get('open_interest') is not None:
-                                    oi_val = r.get('open_interest')
+                            self.__send_message("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", interval_value, n_bars])
+                            self.__send_message("switch_timezone", [oi_chart, timezone])
+                            raw_oi = ""
+                            while True:
+                                try:
+                                    result = self.ws.recv()
+                                    raw_oi += result + "\n"
+                                except Exception:
+                                    break
+                                if "series_completed" in result:
+                                    break
+                            if '"s":[' in raw_oi:
+                                oi_df = self.__create_df(raw_oi, oi_symbol_formatted, timezone=timezone, interval=interval, align_daily_to_trading_day=align_daily_to_trading_day, exchange_tz=self.__extract_exchange_timezone(raw_oi))
+                                if oi_df is not None and len(oi_df) > 0:
+                                    break
+                        except Exception:
+                            continue
+                    if oi_df is not None and len(oi_df) > 0:
+                        try:
+                            oi_series = oi_df['close'] if 'close' in oi_df.columns else oi_df.iloc[:, -1]
+                            df = df.copy()
+                            df['open_interest'] = oi_series.reindex(df.index).values
+                        except Exception:
+                            try:
+                                df = df.copy()
+                                df['open_interest'] = oi_df['close'].values[:len(df)]
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                if 'open_interest' not in df.columns:
+                    oi_val = None
+                    try:
+                        from . import futures as _futures_mod
+                        sym_base = symbol
+                        exch_base = exchange
+                        scan_sym = sym_base
+                        if isinstance(scan_sym, str) and not scan_sym.endswith('!'):
+                            scan_sym_try = f"{scan_sym}1!"
+                        else:
+                            scan_sym_try = scan_sym
+                        try:
+                            import requests
+                            body = {"columns": ["name", "exchange", "open_interest"], "filter": [{"left": "name", "operation": "equal", "right": scan_sym_try}], "range": [0, 10], "sort": {"sortBy": "name", "sortOrder": "asc"}}
+                            if exch_base:
+                                body["filter"].append({"left": "exchange", "operation": "equal", "right": str(exch_base).upper()})
+                            resp = requests.post(_futures_mod.SCAN_URL, json=body, headers=_futures_mod._SCAN_HEADERS, timeout=10, proxies=getattr(self, "proxies", None))
+                            if resp.ok:
+                                payload = resp.json()
+                                data = payload.get("data") or []
+                                for item in data:
+                                    if isinstance(item, dict):
+                                        vals = item.get("d")
+                                        if isinstance(vals, list):
+                                            rowmap = dict(zip(["name", "exchange", "open_interest"], vals))
+                                            if rowmap.get('open_interest') is not None:
+                                                oi_val = rowmap.get('open_interest')
+                                                break
                         except Exception:
                             pass
-                except Exception:
-                    oi_val = None
-                if oi_val is not None:
-                    try:
-                        df['open_interest'] = oi_val
+                        if oi_val is None:
+                            try:
+                                rows, _ = _futures_mod._scan([{"left": "name", "operation": "equal", "right": scan_sym_try}] + ([{"left": "exchange", "operation": "equal", "right": str(exch_base).upper()}] if exch_base else []), 10, timeout=10, proxies=getattr(self, "proxies", None))
+                                if rows:
+                                    r = rows[0]
+                                    if r.get('open_interest') is not None:
+                                        oi_val = r.get('open_interest')
+                            except Exception:
+                                pass
                     except Exception:
-                        pass
+                        oi_val = None
+                    if oi_val is not None:
+                        try:
+                            df = df.copy()
+                            df['open_interest'] = oi_val
+                        except Exception:
+                            pass
         except Exception:
             pass
         return df
