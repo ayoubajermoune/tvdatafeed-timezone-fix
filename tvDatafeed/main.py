@@ -491,29 +491,39 @@ class TvDatafeed:
                         except Exception:
                             continue
                         try:
-                            self.__create_connection()
-                            self.__send_message("set_auth_token", [self.token])
+                            # Use a fresh connection for OI to avoid conflicts
+                            import websocket
+                            from websocket import create_connection
+                            ws_oi = create_connection("wss://data.tradingview.com/socket.io/websocket", headers=TvDatafeed._TvDatafeed__ws_headers, timeout=TvDatafeed._TvDatafeed__ws_timeout)
+                            def send_oi(func, args):
+                                msg = self.__prepend_header(self.__construct_message(func, args))
+                                ws_oi.send(msg)
                             oi_chart = self.__generate_chart_session()
                             oi_quote = self.__generate_session()
-                            self.__send_message("chart_create_session", [oi_chart, ""])
-                            self.__send_message("quote_create_session", [oi_quote])
-                            self.__send_message("quote_add_symbols", [oi_quote, oi_symbol_formatted, {"flags": ["force_permission"]}])
-                            self.__send_message("quote_fast_symbols", [oi_quote, oi_symbol_formatted])
-                            self.__send_message(
+                            send_oi("set_auth_token", [self.token])
+                            send_oi("chart_create_session", [oi_chart, ""])
+                            send_oi("quote_create_session", [oi_quote])
+                            send_oi("quote_add_symbols", [oi_quote, oi_symbol_formatted, {"flags": ["force_permission"]}])
+                            send_oi("quote_fast_symbols", [oi_quote, oi_symbol_formatted])
+                            send_oi(
                                 "resolve_symbol",
                                 [oi_chart, "symbol_oi", '{"symbol":"' + oi_symbol_formatted + '","adjustment":"splits","session":"' + ('regular' if not extended_session else 'extended') + '"}'],
                             )
-                            self.__send_message("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", interval_value, n_bars])
-                            self.__send_message("switch_timezone", [oi_chart, timezone])
+                            send_oi("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", interval_value, n_bars])
+                            send_oi("switch_timezone", [oi_chart, timezone])
                             raw_oi = ""
                             while True:
                                 try:
-                                    result = self.ws.recv()
+                                    result = ws_oi.recv()
                                     raw_oi += result + "\n"
                                 except Exception:
                                     break
                                 if "series_completed" in result:
                                     break
+                            try:
+                                ws_oi.close()
+                            except Exception:
+                                pass
                             if '"s":[' in raw_oi:
                                 oi_df = self.__create_df(raw_oi, oi_symbol_formatted, timezone=timezone, interval=interval, align_daily_to_trading_day=align_daily_to_trading_day, exchange_tz=self.__extract_exchange_timezone(raw_oi))
                                 if oi_df is not None and len(oi_df) > 0:
