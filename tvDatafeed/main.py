@@ -304,6 +304,11 @@ class TvDatafeed:
         extended_session: bool = False,
         timezone: str = "UTC",
         align_daily_to_trading_day: bool = True,
+        open_interest: bool = False,
+        include_oi: bool = None,
+        include_open_interest: bool = None,
+        oi: bool = None,
+        **kwargs,
     ) -> pd.DataFrame:
         """get historical data
 
@@ -338,6 +343,34 @@ class TvDatafeed:
             pd.Dataframe: dataframe with sohlcv as columns, indexed by a
             datetime index that is timezone-aware (except timezone="exchange")
         """
+        # Normalize open_interest parameter - accept various forms for flexibility
+        _include_oi = open_interest
+        if include_oi is not None and isinstance(include_oi, bool):
+            _include_oi = include_oi
+        if include_open_interest is not None and isinstance(include_open_interest, bool):
+            _include_oi = include_open_interest
+        if oi is not None and isinstance(oi, bool):
+            _include_oi = oi
+        # Also check for legacy names
+        for k in ('pool', 'Pool', 'POOL', 'openInterest', 'OpenInterest'):
+            if k in kwargs:
+                v = kwargs.get(k)
+                if isinstance(v, bool):
+                    _include_oi = v
+                    break
+                elif v is not None:
+                    try:
+                        if isinstance(v, str):
+                            _include_oi = v.strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+                        else:
+                            _include_oi = bool(v)
+                        break
+                    except Exception:
+                        pass
+
+        if not isinstance(_include_oi, bool):
+            _include_oi = False
+
         # Validate before touching the network so a bad timezone fails fast.
         if timezone != "exchange":
             try:
@@ -349,7 +382,7 @@ class TvDatafeed:
                     "'Asia/Riyadh'."
                 ) from None
 
-        symbol = self.__format_symbol(
+        symbol_formatted = self.__format_symbol(
             symbol=symbol, exchange=exchange, contract=fut_contract
         )
 
@@ -391,10 +424,10 @@ class TvDatafeed:
         )
 
         self.__send_message(
-            "quote_add_symbols", [self.session, symbol,
+            "quote_add_symbols", [self.session, symbol_formatted,
                                   {"flags": ["force_permission"]}]
         )
-        self.__send_message("quote_fast_symbols", [self.session, symbol])
+        self.__send_message("quote_fast_symbols", [self.session, symbol_formatted])
 
         self.__send_message(
             "resolve_symbol",
@@ -402,7 +435,7 @@ class TvDatafeed:
                 self.chart_session,
                 "symbol_1",
                 '={"symbol":"'
-                + symbol
+                + symbol_formatted
                 + '","adjustment":"splits","session":'
                 + ('"regular"' if not extended_session else '"extended"')
                 + "}",
@@ -417,7 +450,7 @@ class TvDatafeed:
 
         raw_data = ""
 
-        logger.debug(f"getting data for {symbol}...")
+        logger.debug(f"getting data for {symbol_formatted}...")
         while True:
             try:
                 result = self.ws.recv()
@@ -429,14 +462,77 @@ class TvDatafeed:
             if "series_completed" in result:
                 break
 
-        return self.__create_df(
+        df = self.__create_df(
             raw_data,
-            symbol,
+            symbol_formatted,
             timezone=timezone,
             interval=interval,
             align_daily_to_trading_day=align_daily_to_trading_day,
             exchange_tz=self.__extract_exchange_timezone(raw_data),
         )
+        if df is None:
+            return df
+        try:
+            if _include_oi and fut_contract is not None:
+                oi_val = None
+                try:
+                    from . import futures as _futures_mod
+                    sym_base = symbol
+                    exch_base = exchange
+                    scan_sym = sym_base
+                    if isinstance(scan_sym, str) and not scan_sym.endswith('!'):
+                        scan_sym_try = f"{scan_sym}1!"
+                    else:
+                        scan_sym_try = scan_sym
+                    try:
+                        import requests
+                        body = {
+                            "columns": ["name", "exchange", "open_interest"],
+                            "filter": [{"left": "name", "operation": "equal", "right": scan_sym_try}],
+                            "range": [0, 10],
+                            "sort": {"sortBy": "name", "sortOrder": "asc"},
+                        }
+                        if exch_base:
+                            body["filter"].append({"left": "exchange", "operation": "equal", "right": str(exch_base).upper()})
+                        resp = requests.post(_futures_mod.SCAN_URL, json=body, headers=_futures_mod._SCAN_HEADERS,
+                                             timeout=10, proxies=getattr(self, "proxies", None))
+                        if resp.ok:
+                            payload = resp.json()
+                            data = payload.get("data") or []
+                            for item in data:
+                                if isinstance(item, dict):
+                                    vals = item.get("d")
+                                    if isinstance(vals, list):
+                                        rowmap = dict(zip(["name", "exchange", "open_interest"], vals))
+                                        if rowmap.get('open_interest') is not None:
+                                            oi_val = rowmap.get('open_interest')
+                                            break
+                    except Exception:
+                        pass
+                    if oi_val is None:
+                        try:
+                            rows, _ = _futures_mod._scan(
+                                [{"left": "name", "operation": "equal", "right": scan_sym_try}] + ([{"left": "exchange", "operation": "equal", "right": str(exch_base).upper()}] if exch_base else []),
+                                10,
+                                timeout=10,
+                                proxies=getattr(self, "proxies", None),
+                            )
+                            if rows:
+                                r = rows[0]
+                                if r.get('open_interest') is not None:
+                                    oi_val = r.get('open_interest')
+                        except Exception:
+                            pass
+                except Exception:
+                    oi_val = None
+                if oi_val is not None:
+                    try:
+                        df['open_interest'] = oi_val
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return df
 
     def search_symbol(
         self,
