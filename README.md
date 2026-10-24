@@ -104,6 +104,11 @@ data = tv.get_hist(..., timezone='exchange')
 
 # 4) raw TradingView dates (no alignment)
 data = tv.get_hist(..., align_daily_to_trading_day=False)
+
+# 5) get open interest for futures contracts
+data = tv.get_hist(symbol='CL', exchange='NYMEX', interval=Interval.in_daily,
+                   n_bars=10, fut_contract=1, open_interest=True)
+# also accepts: include_oi=True, pool=True, oi=True
 ```
 
 مثال عملي كامل في `examples/example_usage.py`.

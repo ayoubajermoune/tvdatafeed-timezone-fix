@@ -83,8 +83,13 @@ tv.get_hist(
     n_bars: int = 10,                   # number of bars (max ~5000)
     fut_contract: int = None,           # None for cash, 1/2 for continuous futures
     extended_session: bool = False,     # extended session (outside regular hours)
-    timezone: str = "UTC",              # ★ new -- timezone
-    align_daily_to_trading_day: bool = True,  # ★ new -- daily-bar date alignment
+    timezone: str = "UTC",              # timezone
+    align_daily_to_trading_day: bool = True,  # daily-bar date alignment
+    open_interest: bool = False,        # add open_interest column for futures
+    include_oi: bool = None,            # alias for open_interest
+    include_open_interest: bool = None, # alias for open_interest
+    oi: bool = None,                    # alias for open_interest
+    **kwargs,                           # accepts pool/Pool/POOL/openInterest/OpenInterest
 ) -> pd.DataFrame
 ```
 
@@ -132,8 +137,30 @@ print("timezone:", df.index.tz)
 | `symbol` | الرمز بالصيغة `EXCHANGE:SYMBOL` |
 | `open` / `high` / `low` / `close` | سعر الافتتاح/الأعلى/الأدنى/الإغلاق |
 | `volume` | الحجم |
+| `open_interest` | الرصيد المفتوح (يُضاف فقط عند تمرير `open_interest=True` أو أحد الأسماء البديلة مع `fut_contract` للعقود الآجلة) |
 
 كما يُضاف `df.attrs["timezone"]` (اسم المنطقة الزمنية) و `df.attrs["aligned_to_trading_day"]` (هل طُبّق تصحيح تاريخ اليوم).
+
+#### مثال استخدام Open Interest مع العقود الآجلة
+
+```python
+from tvDatafeed import TvDatafeed, Interval
+
+tv = TvDatafeed()
+
+# إضافة عمود open_interest
+df = tv.get_hist("CL", "NYMEX", interval=Interval.in_1_hour, n_bars=10, fut_contract=1, open_interest=True)
+print(df[["open", "close", "volume", "open_interest"]])
+
+# يمكن استخدام أسماء بديلة
+df = tv.get_hist("CL", "NYMEX", interval=Interval.in_daily, n_bars=5, fut_contract=1, pool=True)
+```
+
+**ملاحظات:**
+- القيمة الافتراضية `False` ولا يتم إضافة العمود إلا عند الطلب صراحة
+- عدم تمرير المعامل أو تمريره بـ `False` لا يسبب أي خطأ
+- يعمل فقط عند تمرير `fut_contract` للعقود الآجلة
+- يتم جلب القيمة من TradingView futures screener وإضافتها كقيمة ثابتة لجميع الصفوف
 
 ---
 
