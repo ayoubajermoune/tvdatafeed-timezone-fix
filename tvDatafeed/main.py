@@ -509,7 +509,11 @@ class TvDatafeed:
                                 "resolve_symbol",
                                 [oi_chart, "symbol_oi", '{"symbol":"' + oi_symbol_formatted + '","adjustment":"splits","session":"' + ('regular' if not extended_session else 'extended') + '"}'],
                             )
-                            send_oi("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", interval_value, n_bars])
+                            # Follow Pine logic: intraday use same timeframe, else daily
+                            oi_interval = interval_value
+                            if interval in (Interval.in_daily, Interval.in_weekly, Interval.in_monthly):
+                                oi_interval = "1D"
+                            send_oi("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", oi_interval, n_bars])
                             send_oi("switch_timezone", [oi_chart, timezone])
                             raw_oi = ""
                             while True:
@@ -534,16 +538,27 @@ class TvDatafeed:
                         try:
                             oi_series = oi_df['close'] if 'close' in oi_df.columns else oi_df.iloc[:, -1]
                             df = df.copy()
-                            # Use exact values per timestamp when possible
                             try:
-                                df['open_interest'] = oi_series.reindex(df.index).ffill().bfill().values
+                                if interval in (Interval.in_daily, Interval.in_weekly, Interval.in_monthly):
+                                    # Map daily OI to daily bars
+                                    try:
+                                        oi_series.index = oi_series.index.normalize()
+                                        df_idx = df.index.copy()
+                                        if hasattr(df_idx, 'tz') and df_idx.tz is not None:
+                                            df_idx_norm = df_idx.tz_convert('UTC').tz_localize(None).normalize()
+                                        else:
+                                            df_idx_norm = pd.to_datetime(df_idx).normalize()
+                                        df['open_interest'] = oi_series.reindex(df_idx_norm).ffill().bfill().values
+                                    except Exception:
+                                        df['open_interest'] = oi_series.ffill().bfill().values[:len(df)]
+                                else:
+                                    df['open_interest'] = oi_series.reindex(df.index).ffill().bfill().values
                             except Exception:
                                 try:
                                     df['open_interest'] = oi_series.reindex(df.index).values
-                                    # If all NaN, use last value
-                                    if df['open_interest'].isna().all():
+                                    if hasattr(df['open_interest'], 'isna') and df['open_interest'].isna().all():
                                         df['open_interest'] = float(oi_series.dropna().iloc[-1]) if len(oi_series.dropna()) > 0 else None
-                                    else:
+                                    elif hasattr(df['open_interest'], 'ffill'):
                                         df['open_interest'] = df['open_interest'].ffill().bfill()
                                 except Exception:
                                     df['open_interest'] = float(oi_series.dropna().iloc[-1]) if len(oi_series.dropna()) > 0 else None
