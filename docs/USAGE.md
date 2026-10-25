@@ -137,7 +137,7 @@ print("timezone:", df.index.tz)
 | `symbol` | الرمز بالصيغة `EXCHANGE:SYMBOL` |
 | `open` / `high` / `low` / `close` | سعر الافتتاح/الأعلى/الأدنى/الإغلاق |
 | `volume` | الحجم |
-| `open_interest` | الرصيد المفتوح التاريخي (يُضاف فقط عند تمرير `open_interest=True` أو أحد الأسماء البديلة مع `fut_contract` للعقود الآجلة). القيمة يومية من TradingView وتُوزّع على الشموع حسب الجلسة |
+| `open_interest` | الرصيد المفتوح التاريخي (يُضاف عند تمرير `open_interest=True` أو أحد الأسماء البديلة، مع أو بدون `fut_contract`). القيمة يومية من TradingView وتُوزّع على الشموع حسب الجلسة |
 
 كما يُضاف `df.attrs["timezone"]` (اسم المنطقة الزمنية) و `df.attrs["aligned_to_trading_day"]` (هل طُبّق تصحيح تاريخ اليوم).
 
@@ -152,6 +152,10 @@ tv = TvDatafeed()
 df = tv.get_hist("CL", "NYMEX", interval=Interval.in_1_hour, n_bars=10, fut_contract=1, open_interest=True)
 print(df[["open", "close", "volume", "open_interest"]])
 
+# العقود المستمرة والمحددة تعمل مباشرة (بدون fut_contract)
+continuous = tv.get_hist("CL1!", "NYMEX", interval=Interval.in_daily, n_bars=5, open_interest=True)
+dated = tv.get_hist("CLZ2026", "NYMEX", interval=Interval.in_daily, n_bars=5, open_interest=True)
+
 # يمكن استخدام أسماء بديلة
 df = tv.get_hist("CL", "NYMEX", interval=Interval.in_daily, n_bars=5, fut_contract=1, pool=True)
 ```
@@ -159,7 +163,9 @@ df = tv.get_hist("CL", "NYMEX", interval=Interval.in_daily, n_bars=5, fut_contra
 **ملاحظات:**
 - القيمة الافتراضية `False` ولا يتم إضافة العمود إلا عند الطلب صراحة
 - عدم تمرير المعامل أو تمريره بـ `False` لا يسبب أي خطأ
-- يعمل فقط عند تمرير `fut_contract` للعقود الآجلة
+- يعمل مع الجذر الخالص + `fut_contract` (مثل `CL` → `NYMEX:CL1!`)، ومع العقود المستمرة (`CL1!`) والمحددة (`CLZ2026`) حتى بدون `fut_contract`
+- `fut_contract` لا يُضاف إلى رمز يحدد العقد مسبقاً؛ فلا ينتج `NYMEX:CL1!1!` أو `NYMEX:CLZ20261!`
+- إذا كان الجذر الخالص غير متداول بدون عقد (مثل `NYMEX:CL`) تُعاد المحاولة تلقائياً على العقد المستمر `NYMEX:CL1!`
 - يتم جلب الرصيد المفتوح التاريخي من سلسلة TradingView اليومية (`<TICKER>_OI` أو `<TICKER>1!_OI`)، وليس من الـ screener
 - TradingView ينشر الرصيد المفتوح **يومياً** فقط؛ لذلك:
   - الشموع اليومية تحصل على قيمة OI الخاصة بكل يوم

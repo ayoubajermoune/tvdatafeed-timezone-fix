@@ -120,3 +120,20 @@ try:
     search_futures(category="crypto futures")
 except ValueError as exc:
     print("ValueError ->", str(exc)[:70], "...")
+
+print("\n" + "=" * 70)
+print("7) Open interest -- bare root, continuous and dated contracts")
+print("=" * 70)
+
+# A bare root with fut_contract=1 -> NYMEX:CL1! and NYMEX:CL1!_OI
+print(tv.get_hist(symbol="CL", exchange="NYMEX",
+                  interval=Interval.in_daily, n_bars=3,
+                  fut_contract=1, open_interest=True).tail(3))
+
+# Explicit contracts need no fut_contract; the symbol is not suffixed twice.
+for contract in ("CL1!", "CLZ2026", "CLK2027"):
+    df = tv.get_hist(symbol=contract, exchange="NYMEX",
+                     interval=Interval.in_daily, n_bars=3,
+                     open_interest=True)
+    print(contract, "->", df["symbol"].iloc[-1],
+          "| OI:", df["open_interest"].iloc[-1])

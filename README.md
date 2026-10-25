@@ -106,8 +106,13 @@ data = tv.get_hist(..., timezone='exchange')
 data = tv.get_hist(..., align_daily_to_trading_day=False)
 
 # 5) get open interest for futures contracts
+#    bare root + fut_contract: CL -> NYMEX:CL1!
+#    continuous contract:      CL1! -> NYMEX:CL1!_OI
+#    dated contract:           CLZ2026 -> NYMEX:CLZ2026_OI
 data = tv.get_hist(symbol='CL', exchange='NYMEX', interval=Interval.in_daily,
                    n_bars=10, fut_contract=1, open_interest=True)
+data = tv.get_hist(symbol='CLZ2026', exchange='NYMEX', interval=Interval.in_daily,
+                   n_bars=10, open_interest=True)  # fut_contract not needed
 # also accepts: include_oi=True, pool=True, oi=True
 ```
 
@@ -117,6 +122,13 @@ data = tv.get_hist(symbol='CL', exchange='NYMEX', interval=Interval.in_daily,
 > لذلك الشموع داخل اليوم تحمل OI جلستها (ثابت داخل الجلسة ويتغير عند
 > بداية جلسة جديدة)، والشموع الأسبوعية/الشهرية تحمل آخر OI يومي داخل
 > الفترة. إذا لم يتوفر تاريخ OI يكون العمود `NaN` مع تحذير في اللوج.
+>
+> `fut_contract` يُطبّق فقط على الجذر الخالص (`CL` → `NYMEX:CL1!`).
+> إذا كان الرمز يحدد العقد مسبقاً (`CL1!` أو `CLZ2026`) فلا يُضاف `1!`
+> مرة أخرى. وإذا كان الجذر الخالص غير متداول بدون عقد (مثل `NYMEX:CL`)
+> تُعاد المحاولة تلقائياً على العقد المستمر `NYMEX:CL1!`.
+> عمود `open_interest` يُضاف متى طُلب `open_interest=True` حتى بدون
+> تمرير `fut_contract`.
 
 مثال عملي كامل في `examples/example_usage.py`.
 

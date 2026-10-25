@@ -650,4 +650,4 @@ def test_package_exports_futures_search():
 def test_version_bumped_for_the_new_feature():
     import tvDatafeed
 
-    assert tvDatafeed.__version__ == "2.3.1"
+    assert tvDatafeed.__version__ == "2.3.2"

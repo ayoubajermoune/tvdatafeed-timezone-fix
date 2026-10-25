@@ -42,6 +42,90 @@ def _build_resolve_payload(symbol, extended_session=False):
     )
 
 
+_CONTINUOUS_CONTRACT_RE = re.compile(r"!\s*$")
+# Futures month code followed by a 1-4 digit year, e.g. CLZ2026 or ESZ5.
+_DATED_CONTRACT_RE = re.compile(r"[FGHJKMNQUVXZ]\d{1,4}$")
+
+
+def _split_symbol(symbol, exchange):
+    """Return ``(exchange, ticker)`` for ``SYMBOL`` or ``EXCHANGE:SYMBOL``."""
+    if not isinstance(symbol, str):
+        return exchange, symbol
+    if ":" in symbol:
+        exch, ticker = symbol.split(":", 1)
+        return exch or exchange, ticker
+    return exchange, symbol
+
+
+def _is_explicit_contract(ticker):
+    """Whether ``ticker`` already identifies a continuous/dated contract."""
+    if not isinstance(ticker, str):
+        return False
+    ticker = re.sub(r"_OI$", "", ticker.strip(), flags=re.IGNORECASE)
+    return bool(
+        _CONTINUOUS_CONTRACT_RE.search(ticker)
+        or _DATED_CONTRACT_RE.search(ticker)
+    )
+
+
+def _is_bare_root(ticker):
+    """Whether ``ticker`` is a plain root (``CL``) rather than a contract."""
+    if not isinstance(ticker, str):
+        return False
+    ticker = ticker.strip()
+    return bool(ticker) and not _is_explicit_contract(ticker)
+
+
+def _continuous_symbol(symbol):
+    """Return the continuous front-month symbol for a bare root."""
+    exchange, ticker = _split_symbol(symbol, "")
+    prefix = f"{exchange}:" if exchange else ""
+    if _is_explicit_contract(ticker):
+        return prefix + ticker
+    return f"{prefix}{ticker}1!"
+
+
+def _is_resolve_error(raw_data):
+    """Whether the raw payload reports a symbol-resolution failure."""
+    if not raw_data:
+        return False
+    return (
+        '"m":"symbol_error"' in raw_data
+        or '"resolve error"' in raw_data
+    )
+
+
+def _oi_symbol_candidates(symbol, fut_contract=None):
+    """Build TradingView ``_OI`` symbol candidates for ``symbol``.
+
+    ``symbol`` must be the final (already formatted) symbol, e.g.
+    ``NYMEX:CL1!`` or ``NYMEX:CLZ2026``.  TradingView publishes open
+    interest as ``<TICKER>_OI`` for dated contracts and as
+    ``<TICKER>1!_OI`` for continuous contracts.
+    """
+    exchange, ticker = _split_symbol(symbol, "")
+    if not isinstance(ticker, str) or not ticker:
+        return []
+    ticker = re.sub(r"_OI$", "", ticker.strip(), flags=re.IGNORECASE)
+    candidates = []
+
+    if _CONTINUOUS_CONTRACT_RE.search(ticker):
+        candidates.append(f"{ticker}_OI")
+    elif _DATED_CONTRACT_RE.search(ticker):
+        candidates.append(f"{ticker}_OI")
+    elif isinstance(fut_contract, int) and not isinstance(fut_contract, bool):
+        candidates.append(f"{ticker}{fut_contract}!_OI")
+        candidates.append(f"{ticker}_OI")
+    else:
+        candidates.append(f"{ticker}_OI")
+        # A bare futures root may not have an OI series of its own; the
+        # continuous contract is the next best source.
+        candidates.append(f"{ticker}1!_OI")
+
+    prefix = f"{exchange}:" if exchange else ""
+    return [prefix + candidate for candidate in dict.fromkeys(candidates)]
+
+
 def _map_open_interest_to_bars(
     df,
     oi_df,
@@ -260,6 +344,113 @@ class TvDatafeed:
             print(m)
         self.ws.send(m)
 
+    def __close_connection(self):
+        """Close the active websocket, if any."""
+        ws = getattr(self, "ws", None)
+        self.ws = None
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
+
+    def __request_raw(
+        self,
+        symbol_formatted,
+        interval_value,
+        n_bars,
+        timezone,
+        extended_session=False,
+        include_quote=True,
+        chart_session=None,
+        quote_session=None,
+    ):
+        """Fetch the raw TradingView payload for one symbol.
+
+        The connection is always closed before returning.  The read loop
+        stops as soon as TradingView reports a completed series or a
+        symbol/series error, so invalid symbols fail fast instead of
+        waiting for the socket timeout.
+        """
+        chart_session = chart_session or self.chart_session
+        quote_session = quote_session or self.session
+        self.__create_connection()
+        try:
+            self.__send_message("set_auth_token", [self.token])
+            self.__send_message("chart_create_session", [chart_session, ""])
+            if include_quote:
+                self.__send_message("quote_create_session", [quote_session])
+                self.__send_message(
+                    "quote_set_fields",
+                    [
+                        quote_session,
+                        "ch",
+                        "chp",
+                        "current_session",
+                        "description",
+                        "local_description",
+                        "language",
+                        "exchange",
+                        "fractional",
+                        "is_tradable",
+                        "lp",
+                        "lp_time",
+                        "minmov",
+                        "minmove2",
+                        "original_name",
+                        "pricescale",
+                        "pro_name",
+                        "short_name",
+                        "type",
+                        "update_mode",
+                        "volume",
+                        "currency_code",
+                        "rchp",
+                        "rtc",
+                    ],
+                )
+                self.__send_message(
+                    "quote_add_symbols",
+                    [quote_session, symbol_formatted,
+                     {"flags": ["force_permission"]}],
+                )
+                self.__send_message(
+                    "quote_fast_symbols", [quote_session, symbol_formatted]
+                )
+
+            self.__send_message(
+                "resolve_symbol",
+                [
+                    chart_session,
+                    "symbol_1",
+                    _build_resolve_payload(symbol_formatted, extended_session),
+                ],
+            )
+            self.__send_message(
+                "create_series",
+                [chart_session, "s1", "s1", "symbol_1",
+                 interval_value, n_bars],
+            )
+            # Let TradingView chart the requested timezone (or exchange clock).
+            self.__send_message("switch_timezone", [chart_session, timezone])
+
+            raw_data = ""
+            logger.debug(f"getting data for {symbol_formatted}...")
+            while True:
+                try:
+                    result = self.ws.recv()
+                except Exception as exc:
+                    logger.error(exc)
+                    break
+                raw_data += result + "\n"
+                if "series_completed" in result:
+                    break
+                if "symbol_error" in result or "series_error" in result:
+                    break
+            return raw_data
+        finally:
+            self.__close_connection()
+
     @staticmethod
     def __extract_exchange_timezone(raw_data: str):
         """Return the exchange timezone reported by TradingView.
@@ -391,19 +582,31 @@ class TvDatafeed:
 
     @staticmethod
     def __format_symbol(symbol, exchange, contract: int = None):
+        """Build ``EXCHANGE:TICKER`` without duplicating a contract suffix.
 
-        if ":" in symbol:
-            pass
-        elif contract is None:
-            symbol = f"{exchange}:{symbol}"
+        ``fut_contract`` is only applied to a bare root (``CL`` ->
+        ``NYMEX:CL1!``).  If the symbol already names a contract -- either a
+        continuous one (``CL1!``) or a dated one (``CLZ2026``) -- it is kept
+        as-is, even when ``fut_contract`` is provided.
+        """
+        exchange, ticker = _split_symbol(symbol, exchange)
+        prefix = f"{exchange}:" if exchange else ""
 
-        elif isinstance(contract, int):
-            symbol = f"{exchange}:{symbol}{contract}!"
+        if contract is None:
+            return prefix + ticker
 
-        else:
+        if isinstance(contract, bool) or not isinstance(contract, int):
             raise ValueError("not a valid contract")
 
-        return symbol
+        if _is_explicit_contract(ticker):
+            logger.debug(
+                "fut_contract=%s ignored: %s already identifies a contract",
+                contract,
+                ticker,
+            )
+            return prefix + ticker
+
+        return f"{prefix}{ticker}{contract}!"
 
     def get_hist(
         self,
@@ -428,7 +631,11 @@ class TvDatafeed:
             exchange (str, optional): exchange, not required if symbol is in format EXCHANGE:SYMBOL. Defaults to None.
             interval (Interval, optional): chart interval. Defaults to Interval.in_daily.
             n_bars (int, optional): no of bars to download, max 5000. Defaults to 10.
-            fut_contract (int, optional): None for cash, 1 for continuous current contract in front, 2 for continuous next contract in front. Defaults to None.
+            fut_contract (int, optional): None for cash, 1 for continuous
+                current contract in front, 2 for continuous next contract in
+                front. Defaults to None. It is only applied to a bare root
+                (``CL`` -> ``NYMEX:CL1!``); symbols that already name a
+                contract (``CL1!``, ``CLZ2026``) are used as-is.
             extended_session (bool, optional): regular session if False, extended session if True, Defaults to False.
             timezone (str, optional): timezone of the returned index. Defaults to "UTC".
                 - "UTC" (default): the index is timezone-aware UTC. The data is
@@ -449,6 +656,13 @@ class TvDatafeed:
                 dated one day forward so every bar is dated by the trading day
                 it represents. Set False to keep TradingView's raw open-date
                 labels.
+            open_interest (bool, optional): attach a historical
+                ``open_interest`` column. Defaults to False. Works for bare
+                roots with ``fut_contract``, continuous contracts (``CL1!``)
+                and dated contracts (``CLZ2026``). OI is published daily, so
+                intraday bars carry the OI of their session and weekly/monthly
+                bars carry the last daily OI of their period. When no OI
+                history is available the column contains ``NaN``.
 
         Returns:
             pd.Dataframe: dataframe with sohlcv as columns, indexed by a
@@ -496,82 +710,47 @@ class TvDatafeed:
         symbol_formatted = self.__format_symbol(
             symbol=symbol, exchange=exchange, contract=fut_contract
         )
-
         interval_value = interval.value
 
-        self.__create_connection()
-
-        self.__send_message("set_auth_token", [self.token])
-        self.__send_message("chart_create_session", [self.chart_session, ""])
-        self.__send_message("quote_create_session", [self.session])
-        self.__send_message(
-            "quote_set_fields",
-            [
-                self.session,
-                "ch",
-                "chp",
-                "current_session",
-                "description",
-                "local_description",
-                "language",
-                "exchange",
-                "fractional",
-                "is_tradable",
-                "lp",
-                "lp_time",
-                "minmov",
-                "minmove2",
-                "original_name",
-                "pricescale",
-                "pro_name",
-                "short_name",
-                "type",
-                "update_mode",
-                "volume",
-                "currency_code",
-                "rchp",
-                "rtc",
-            ],
+        raw_data = self.__request_raw(
+            symbol_formatted,
+            interval_value,
+            n_bars,
+            timezone,
+            extended_session=extended_session,
         )
 
-        self.__send_message(
-            "quote_add_symbols", [self.session, symbol_formatted,
-                                  {"flags": ["force_permission"]}]
-        )
-        self.__send_message("quote_fast_symbols", [self.session, symbol_formatted])
+        used_symbol = symbol_formatted
 
-        self.__send_message(
-            "resolve_symbol",
-            [
-                self.chart_session,
-                "symbol_1",
-                _build_resolve_payload(symbol_formatted, extended_session),
-            ],
-        )
-        self.__send_message(
-            "create_series",
-            [self.chart_session, "s1", "s1", "symbol_1", interval_value, n_bars],
-        )
-        # Let TradingView chart the requested timezone (or the exchange clock).
-        self.__send_message("switch_timezone", [self.chart_session, timezone])
-
-        raw_data = ""
-
-        logger.debug(f"getting data for {symbol_formatted}...")
-        while True:
-            try:
-                result = self.ws.recv()
-                raw_data = raw_data + result + "\n"
-            except Exception as e:
-                logger.error(e)
-                break
-
-            if "series_completed" in result:
-                break
+        # A bare futures root such as NYMEX:CL is not tradable on its own.
+        # Retry the continuous front contract (NYMEX:CL1!) only when
+        # TradingView explicitly reports a resolution error.
+        if (
+            _is_resolve_error(raw_data)
+            and fut_contract is None
+            and _is_bare_root(_split_symbol(symbol_formatted, "")[1])
+        ):
+            continuous = _continuous_symbol(symbol_formatted)
+            logger.info(
+                "%s is not a tradable symbol; retrying the continuous "
+                "front contract %s",
+                symbol_formatted,
+                continuous,
+            )
+            retry_raw = self.__request_raw(
+                continuous,
+                interval_value,
+                n_bars,
+                timezone,
+                extended_session=extended_session,
+            )
+            if not _is_resolve_error(retry_raw):
+                used_symbol = continuous
+                raw_data = retry_raw
 
         df = self.__create_df(
             raw_data,
-            symbol_formatted,
+            used_symbol,
             timezone=timezone,
             interval=interval,
             align_daily_to_trading_day=align_daily_to_trading_day,
@@ -579,138 +758,86 @@ class TvDatafeed:
         )
         if df is None:
             return df
-        try:
-            if _include_oi and fut_contract is not None:
+
+        if _include_oi:
+            oi_df = None
+            candidates = _oi_symbol_candidates(used_symbol, fut_contract)
+
+            # OI is published daily.  Ask for enough daily bars to cover the
+            # whole requested range (weekly/monthly bars span many days).
+            try:
+                _span_days = max((df.index[-1] - df.index[0]).days, 0)
+            except Exception:
+                _span_days = 0
+            oi_n_bars = min(5000, max(int(n_bars), _span_days + 10))
+
+            for oi_symbol in candidates:
+                raw_oi = self.__request_raw(
+                    oi_symbol,
+                    "1D",
+                    oi_n_bars,
+                    timezone,
+                    extended_session=extended_session,
+                    include_quote=False,
+                    chart_session=self.__generate_chart_session(),
+                    quote_session=self.__generate_session(),
+                )
+                if '"s":[' not in raw_oi:
+                    continue
+                # Keep the raw session-open timestamps: the mapper works with
+                # session boundaries and also supports intraday output.
+                candidate_df = self.__create_df(
+                    raw_oi,
+                    oi_symbol,
+                    timezone=timezone,
+                    interval=Interval.in_daily,
+                    align_daily_to_trading_day=False,
+                    exchange_tz=self.__extract_exchange_timezone(raw_oi),
+                )
+                if candidate_df is not None and len(candidate_df) > 0:
+                    oi_df = candidate_df
+                    break
+
+            if oi_df is not None and len(oi_df) > 0:
                 try:
-                    oi_df = None
-                    sym_base = symbol
-                    exch_base = exchange
-                    oi_symbol_candidates = []
-                    if isinstance(sym_base, str):
-                        # Accept both "CL" and "NYMEX:CL1!" and always build
-                        # candidates from the bare ticker.
-                        ticker = sym_base.rsplit(":", 1)[-1]
-                        ticker = re.sub(r"\d+!$", "", ticker)
-                        if fut_contract and isinstance(fut_contract, int):
-                            oi_symbol_candidates.append(f"{ticker}{fut_contract}!_OI")
-                            oi_symbol_candidates.append(f"{ticker}_OI")
-                        else:
-                            oi_symbol_candidates.append(f"{ticker}_OI")
-                    # OI is published daily.  Ask for enough daily bars to
-                    # cover the whole requested range (weekly/monthly bars
-                    # span many days).
-                    try:
-                        _span_days = max((df.index[-1] - df.index[0]).days, 0)
-                    except Exception:
-                        _span_days = 0
-                    oi_n_bars = min(5000, max(int(n_bars), _span_days + 10))
-                    for oi_sym_cand in oi_symbol_candidates:
-                        try:
-                            oi_symbol_formatted = self.__format_symbol(oi_sym_cand, exch_base, contract=None)
-                        except Exception:
-                            continue
-                        try:
-                            # Use a fresh connection for OI to avoid conflicts
-                            import websocket
-                            from websocket import create_connection
-                            ws_oi = create_connection("wss://data.tradingview.com/socket.io/websocket", headers=TvDatafeed._TvDatafeed__ws_headers, timeout=TvDatafeed._TvDatafeed__ws_timeout)
-                            def send_oi(func, args):
-                                msg = self.__prepend_header(self.__construct_message(func, args))
-                                ws_oi.send(msg)
-                            oi_chart = self.__generate_chart_session()
-                            oi_quote = self.__generate_session()
-                            send_oi("set_auth_token", [self.token])
-                            send_oi("chart_create_session", [oi_chart, ""])
-                            send_oi("quote_create_session", [oi_quote])
-                            send_oi("quote_add_symbols", [oi_quote, oi_symbol_formatted, {"flags": ["force_permission"]}])
-                            send_oi("quote_fast_symbols", [oi_quote, oi_symbol_formatted])
-                            send_oi(
-                                "resolve_symbol",
-                                [oi_chart, "symbol_oi", _build_resolve_payload(oi_symbol_formatted, extended_session)],
-                            )
-                            # The _OI symbol only supports a daily resolution;
-                            # intraday requests fail with series_error.
-                            oi_interval = "1D"
-                            send_oi("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", oi_interval, oi_n_bars])
-                            send_oi("switch_timezone", [oi_chart, timezone])
-                            raw_oi = ""
-                            while True:
-                                try:
-                                    result = ws_oi.recv()
-                                    raw_oi += result + "\n"
-                                except Exception:
-                                    break
-                                if "series_completed" in result:
-                                    break
-                                # Don't wait for the socket timeout when the
-                                # candidate symbol/resolution is invalid.
-                                if "series_error" in result or "symbol_error" in result:
-                                    break
-                            try:
-                                ws_oi.close()
-                            except Exception:
-                                pass
-                            if '"s":[' in raw_oi:
-                                # Keep the raw session-open timestamps: the
-                                # mapper works with session boundaries and
-                                # also supports intraday output.
-                                oi_df = self.__create_df(
-                                    raw_oi,
-                                    oi_symbol_formatted,
-                                    timezone=timezone,
-                                    interval=Interval.in_daily,
-                                    align_daily_to_trading_day=False,
-                                    exchange_tz=self.__extract_exchange_timezone(raw_oi),
-                                )
-                                if oi_df is not None and len(oi_df) > 0:
-                                    break
-                        except Exception:
-                            continue
-                    if oi_df is not None and len(oi_df) > 0:
-                        try:
-                            aligned_daily = bool(
-                                df.attrs.get("aligned_to_trading_day", False)
-                            )
-                            attrs = dict(df.attrs)
-                            df = df.copy()
-                            df.attrs.update(attrs)
-                            df['open_interest'] = _map_open_interest_to_bars(
-                                df,
-                                oi_df,
-                                interval=interval,
-                                aligned_to_trading_day=aligned_daily,
-                            )
-                        except Exception as exc:
-                            logger.warning(
-                                "failed to map open interest for %s: %s",
-                                symbol_formatted,
-                                exc,
-                            )
+                    aligned_daily = bool(
+                        df.attrs.get("aligned_to_trading_day", False)
+                    )
+                    attrs = dict(df.attrs)
+                    df = df.copy()
+                    df.attrs.update(attrs)
+                    df["open_interest"] = _map_open_interest_to_bars(
+                        df,
+                        oi_df,
+                        interval=interval,
+                        aligned_to_trading_day=aligned_daily,
+                    )
                 except Exception as exc:
                     logger.warning(
-                        "failed to fetch open interest for %s: %s",
-                        symbol_formatted,
+                        "failed to map open interest for %s: %s",
+                        used_symbol,
                         exc,
                     )
-                if 'open_interest' not in df.columns:
-                    # No historical OI available.  Never broadcast the
-                    # current scanner value across every row: that would
-                    # silently invent data.
-                    logger.warning(
-                        "open interest history is not available for %s; "
-                        "the open_interest column will contain NaN",
-                        symbol_formatted,
-                    )
-                    df = df.copy()
-                    df['open_interest'] = float('nan')
-                elif df['open_interest'].isna().all():
-                    logger.warning(
-                        "open interest history is empty for %s; "
-                        "the open_interest column contains NaN",
-                        symbol_formatted,
-                    )
-        except Exception:
-            pass
+
+            if "open_interest" not in df.columns:
+                # No historical OI available.  Never broadcast the current
+                # scanner value across every row: that would silently invent
+                # data.
+                logger.warning(
+                    "open interest history is not available for %s "
+                    "(tried %s); the open_interest column will contain NaN",
+                    used_symbol,
+                    ", ".join(candidates) or "<none>",
+                )
+                df = df.copy()
+                df["open_interest"] = float("nan")
+            elif df["open_interest"].isna().all():
+                logger.warning(
+                    "open interest history is empty for %s; "
+                    "the open_interest column contains NaN",
+                    used_symbol,
+                )
+
         return df
 
     def search_symbol(
