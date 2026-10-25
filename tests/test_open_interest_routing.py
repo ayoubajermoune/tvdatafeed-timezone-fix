@@ -12,6 +12,7 @@ They cover the bugs fixed in this fork:
   contract (``NYMEX:CL1!``) instead of failing.
 """
 import json
+import logging
 import sys
 from pathlib import Path
 from unittest import mock
@@ -26,6 +27,7 @@ from tvDatafeed.main import (  # noqa: E402
     _continuous_symbol,
     _is_bare_root,
     _is_explicit_contract,
+    _oi_raw_status,
     _oi_symbol_candidates,
 )
 
@@ -102,6 +104,21 @@ def test_continuous_symbol():
 )
 def test_oi_symbol_candidates(symbol, contract, expected):
     assert _oi_symbol_candidates(symbol, contract) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("", "empty"),
+        ("   \n", "empty"),
+        ('{"m":"timescale_update","p":[{"s":[{"i":0,"v":[1]}]}]}', "data"),
+        ('{"m":"symbol_error","p":[]}', "symbol_error"),
+        ('{"m":"series_error","p":[]}', "series_error"),
+        ('{"m":"heartbeat","p":[]}', "no_data"),
+    ],
+)
+def test_oi_raw_status(raw, expected):
+    assert _oi_raw_status(raw) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -328,3 +345,87 @@ def test_missing_oi_adds_nan_column():
     assert "open_interest" in df.columns
     assert df["open_interest"].isna().all()
     assert requests == ["NYMEX:CLK2027", "NYMEX:CLK2027_OI"]
+
+
+def test_missing_oi_warning_lists_candidate_statuses(caplog):
+    requests, connections = [], []
+    values = {"NYMEX:CLK2027": 91.02}
+
+    with caplog.at_level(logging.WARNING, logger="tvDatafeed.main"):
+        with mock.patch(
+            "tvDatafeed.main.create_connection",
+            _fake_connection(requests, values, connections),
+        ):
+            _tv().get_hist(
+                "CLK2027",
+                "NYMEX",
+                interval=Interval.in_daily,
+                n_bars=1,
+                open_interest=True,
+            )
+
+    assert "NYMEX:CLK2027_OI (symbol_error)" in caplog.text
+
+
+def test_transient_empty_oi_is_retried_once():
+    requests, connections = [], []
+    values = {"NYMEX:CLK2027": 91.02, "NYMEX:CLK2027_OI": 48837.0}
+    state = {"empty_sent": False}
+
+    def factory(*args, **kwargs):
+        def router(messages):
+            symbol = _requested_symbol(messages)
+            requests.append(symbol)
+            if symbol == "NYMEX:CLK2027_OI" and not state["empty_sent"]:
+                state["empty_sent"] = True
+                return []  # dropped/empty response, must be retried
+            if symbol in values:
+                return [
+                    _timescale_message(
+                        values[symbol], oi=symbol.endswith("_OI")
+                    ),
+                    _completed_message(),
+                ]
+            return _error_messages()
+
+        ws = FakeWebSocket(router)
+        connections.append(ws)
+        return ws
+
+    with mock.patch("tvDatafeed.main.create_connection", factory):
+        df = _tv().get_hist(
+            "CLK2027",
+            "NYMEX",
+            interval=Interval.in_daily,
+            n_bars=1,
+            open_interest=True,
+        )
+
+    assert df is not None
+    assert df["open_interest"].iloc[0] == 48837.0
+    assert requests == [
+        "NYMEX:CLK2027",
+        "NYMEX:CLK2027_OI",
+        "NYMEX:CLK2027_OI",
+    ]
+    assert all(ws.closed for ws in connections)
+
+
+def test_symbol_error_is_not_retried():
+    requests, connections = [], []
+    values = {"NYMEX:CLK2027": 91.02}
+
+    with mock.patch(
+        "tvDatafeed.main.create_connection",
+        _fake_connection(requests, values, connections),
+    ):
+        _tv().get_hist(
+            "CLK2027",
+            "NYMEX",
+            interval=Interval.in_daily,
+            n_bars=1,
+            open_interest=True,
+        )
+
+    # symbol_error is final: exactly one OI attempt.
+    assert requests.count("NYMEX:CLK2027_OI") == 1

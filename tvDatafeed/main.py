@@ -95,6 +95,24 @@ def _is_resolve_error(raw_data):
     )
 
 
+def _oi_raw_status(raw_data):
+    """Classify an open-interest payload for logging and retry decisions.
+
+    Returns one of ``"data"``, ``"symbol_error"``, ``"series_error"``,
+    ``"empty"`` (nothing received) or ``"no_data"`` (messages received but
+    no series).  Only ``"empty"``/``"no_data"`` are treated as transient.
+    """
+    if not raw_data or not raw_data.strip():
+        return "empty"
+    if '"s":[' in raw_data:
+        return "data"
+    if "symbol_error" in raw_data:
+        return "symbol_error"
+    if "series_error" in raw_data:
+        return "series_error"
+    return "no_data"
+
+
 def _oi_symbol_candidates(symbol, fut_contract=None):
     """Build TradingView ``_OI`` symbol candidates for ``symbol``.
 
@@ -771,18 +789,38 @@ class TvDatafeed:
                 _span_days = 0
             oi_n_bars = min(5000, max(int(n_bars), _span_days + 10))
 
+            oi_attempts = []
             for oi_symbol in candidates:
-                raw_oi = self.__request_raw(
-                    oi_symbol,
-                    "1D",
-                    oi_n_bars,
-                    timezone,
-                    extended_session=extended_session,
-                    include_quote=False,
-                    chart_session=self.__generate_chart_session(),
-                    quote_session=self.__generate_session(),
+                raw_oi = ""
+                status = "empty"
+                # Retry once on a transient empty reply (dropped socket or
+                # rate limiting).  Explicit symbol/series errors are final.
+                for attempt in range(2):
+                    raw_oi = self.__request_raw(
+                        oi_symbol,
+                        "1D",
+                        oi_n_bars,
+                        timezone,
+                        extended_session=extended_session,
+                        include_quote=False,
+                        chart_session=self.__generate_chart_session(),
+                        quote_session=self.__generate_session(),
+                    )
+                    status = _oi_raw_status(raw_oi)
+                    if status in ("data", "symbol_error", "series_error"):
+                        break
+                    logger.debug(
+                        "open interest candidate %s returned %s "
+                        "(attempt %d/2)",
+                        oi_symbol,
+                        status,
+                        attempt + 1,
+                    )
+                oi_attempts.append((oi_symbol, status))
+                logger.debug(
+                    "open interest candidate %s -> %s", oi_symbol, status
                 )
-                if '"s":[' not in raw_oi:
+                if status != "data":
                     continue
                 # Keep the raw session-open timestamps: the mapper works with
                 # session boundaries and also supports intraday output.
@@ -825,9 +863,12 @@ class TvDatafeed:
                 # data.
                 logger.warning(
                     "open interest history is not available for %s "
-                    "(tried %s); the open_interest column will contain NaN",
+                    "(tried %s); the open_interest column will contain NaN. "
+                    "Enable debug logging for per-candidate details.",
                     used_symbol,
-                    ", ".join(candidates) or "<none>",
+                    ", ".join(
+                        f"{sym} ({status})" for sym, status in oi_attempts
+                    ) or "<none>",
                 )
                 df = df.copy()
                 df["open_interest"] = float("nan")

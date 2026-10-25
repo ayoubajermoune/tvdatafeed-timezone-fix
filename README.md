@@ -129,6 +129,11 @@ data = tv.get_hist(symbol='CLZ2026', exchange='NYMEX', interval=Interval.in_dail
 > تُعاد المحاولة تلقائياً على العقد المستمر `NYMEX:CL1!`.
 > عمود `open_interest` يُضاف متى طُلب `open_interest=True` حتى بدون
 > تمرير `fut_contract`.
+>
+> عند تعذّر العثور على سلسلة OI تُعاد محاولة الردود الفارغة مرة واحدة
+> (أخطاء الرمز/السلسلة نهائية ولا تُعاد)، ويظهر تحذير يوضح كل رمز جُرّب
+> وحالته (`data` / `symbol_error` / `series_error`). فعّل `logging.DEBUG`
+> لرؤية تفاصيل كل محاولة.
 
 مثال عملي كامل في `examples/example_usage.py`.
 

@@ -82,3 +82,26 @@ def test_open_interest_respects_timezone_and_weekly_bars():
     )
     _assert_oi(df)
     assert str(df.index.tz) == "America/New_York"
+
+
+def test_reported_script_single_client_all_contracts():
+    """The reported script verbatim: one client, four contracts, 10 bars."""
+    tv = TvDatafeed()  # nologin
+    expected_symbols = {
+        "CL": "NYMEX:CL1!",
+        "CL1!": "NYMEX:CL1!",
+        "CLZ2026": "NYMEX:CLZ2026",
+        "CLK2027": "NYMEX:CLK2027",
+    }
+    for contract in CONTRACTS:
+        df = tv.get_hist(
+            symbol=contract,
+            exchange="NYMEX",
+            interval=Interval.in_daily,
+            n_bars=10,
+            open_interest=True,
+        )
+        _assert_oi(df)
+        assert len(df) == 10
+        assert df["open_interest"].notna().all()
+        assert df["symbol"].iloc[0] == expected_symbols[contract]
