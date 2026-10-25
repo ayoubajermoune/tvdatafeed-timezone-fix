@@ -111,6 +111,13 @@ data = tv.get_hist(symbol='CL', exchange='NYMEX', interval=Interval.in_daily,
 # also accepts: include_oi=True, pool=True, oi=True
 ```
 
+> **ملاحظة حول `open_interest`:**
+> يتم جلب الرصيد المفتوح التاريخي من سلسلة TradingView اليومية
+> (`<TICKER>_OI` أو `<TICKER>1!_OI`). TradingView ينشر OI يومياً فقط،
+> لذلك الشموع داخل اليوم تحمل OI جلستها (ثابت داخل الجلسة ويتغير عند
+> بداية جلسة جديدة)، والشموع الأسبوعية/الشهرية تحمل آخر OI يومي داخل
+> الفترة. إذا لم يتوفر تاريخ OI يكون العمود `NaN` مع تحذير في اللوج.
+
 مثال عملي كامل في `examples/example_usage.py`.
 
 ### البحث عن الرمز — `search_symbol(...)` (بدون تسجيل دخول)

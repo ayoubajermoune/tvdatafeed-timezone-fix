@@ -23,6 +23,107 @@ except ImportError:  # pragma: no cover - running ``python tvDatafeed/main.py``
 logger = logging.getLogger(__name__)
 
 
+def _build_resolve_payload(symbol, extended_session=False):
+    """Build a TradingView ``resolve_symbol`` payload.
+
+    The leading ``=`` is mandatory: TradingView expects the value to be a
+    JSON string prefixed with ``=``.  Omitting it makes every symbol
+    resolution fail with ``symbol_error: invalid symbol`` (this was the
+    root cause of the constant ``open_interest`` column, because the OI
+    request used a payload without the prefix).
+    """
+    session = "extended" if extended_session else "regular"
+    return (
+        '={"symbol":"'
+        + symbol
+        + '","adjustment":"splits","session":"'
+        + session
+        + '"}'
+    )
+
+
+def _map_open_interest_to_bars(
+    df,
+    oi_df,
+    interval=None,
+    aligned_to_trading_day=None,
+):
+    """Map daily open interest onto the bars of ``df``.
+
+    TradingView publishes open interest once per trading session, so the OI
+    series is always requested with a daily resolution.  Each bar receives
+    the OI of the session it belongs to; weekly/monthly bars receive the last
+    daily OI inside their period.  The last (still forming) bar receives the
+    latest OI value available.
+
+    Args:
+        df: OHLCV DataFrame returned by ``get_hist``.
+        oi_df: daily OI DataFrame returned by ``__create_df`` (OI value in
+            the ``close`` column).
+        interval: optional :class:`Interval` of ``df``.  It is used to decide
+            whether period-end mapping is needed (weekly/monthly) and to
+            handle the daily trading-day alignment.
+        aligned_to_trading_day: whether daily bars were shifted to their
+            closing day.  Defaults to ``df.attrs["aligned_to_trading_day"]``.
+
+    Returns:
+        pd.Series: float64 series indexed like ``df``; values are ``NaN``
+        where no historical OI is available.
+    """
+    if df is None:
+        return pd.Series(dtype="float64")
+    if len(df) == 0:
+        return pd.Series(dtype="float64", index=df.index)
+
+    if aligned_to_trading_day is None:
+        aligned_to_trading_day = bool(
+            df.attrs.get("aligned_to_trading_day", False)
+        )
+
+    nan_series = pd.Series(float("nan"), index=df.index, dtype="float64")
+    if oi_df is None or len(oi_df) == 0:
+        return nan_series
+
+    oi_series = oi_df["close"] if "close" in oi_df.columns else oi_df.iloc[:, -1]
+    oi_series = pd.to_numeric(oi_series, errors="coerce").dropna().sort_index()
+    oi_series = oi_series[~oi_series.index.duplicated(keep="last")]
+    if len(oi_series) == 0:
+        return nan_series
+
+    # Build the upper bound used to look up each bar's OI:
+    # - weekly/monthly: the last session inside the period (next bar start
+    #   minus 1 ns); the final bar gets the latest OI available.
+    # - aligned daily bars are dated by their closing day, so the session's
+    #   OI (published at the previous session open) must be strictly before
+    #   the bar label.  Subtracting 1 ns gives that strict bound.
+    # - intraday and unaligned daily bars: the session OI is at or before
+    #   the bar timestamp.
+    if interval in (Interval.in_weekly, Interval.in_monthly):
+        keys = pd.Series(df.index, index=df.index).shift(-1)
+        keys.iloc[-1] = df.index[-1] + pd.Timedelta(days=36500)
+        keys = keys - pd.Timedelta(nanoseconds=1)
+    elif interval == Interval.in_daily and aligned_to_trading_day:
+        shifted = (df.index.hour >= 12).astype("int64")
+        keys = pd.Series(
+            df.index - pd.to_timedelta(shifted, unit="ns"),
+            index=df.index,
+        )
+    else:
+        keys = pd.Series(df.index, index=df.index)
+
+    left = pd.DataFrame({"__oi_key": keys}).sort_values("__oi_key")
+    right = oi_series.rename("open_interest").to_frame().sort_index()
+    merged = pd.merge_asof(
+        left,
+        right,
+        left_on="__oi_key",
+        right_index=True,
+        direction="backward",
+    )
+    merged = merged.sort_index()
+    return merged["open_interest"].astype("float64")
+
+
 class Interval(enum.Enum):
     in_1_minute = "1"
     in_3_minute = "3"
@@ -434,11 +535,7 @@ class TvDatafeed:
             [
                 self.chart_session,
                 "symbol_1",
-                '={"symbol":"'
-                + symbol_formatted
-                + '","adjustment":"splits","session":'
-                + ('"regular"' if not extended_session else '"extended"')
-                + "}",
+                _build_resolve_payload(symbol_formatted, extended_session),
             ],
         )
         self.__send_message(
@@ -480,11 +577,23 @@ class TvDatafeed:
                     exch_base = exchange
                     oi_symbol_candidates = []
                     if isinstance(sym_base, str):
+                        # Accept both "CL" and "NYMEX:CL1!" and always build
+                        # candidates from the bare ticker.
+                        ticker = sym_base.rsplit(":", 1)[-1]
+                        ticker = re.sub(r"\d+!$", "", ticker)
                         if fut_contract and isinstance(fut_contract, int):
-                            oi_symbol_candidates.append(f"{sym_base}{fut_contract}!_OI")
-                            oi_symbol_candidates.append(f"{sym_base}_OI")
+                            oi_symbol_candidates.append(f"{ticker}{fut_contract}!_OI")
+                            oi_symbol_candidates.append(f"{ticker}_OI")
                         else:
-                            oi_symbol_candidates.append(f"{sym_base}_OI")
+                            oi_symbol_candidates.append(f"{ticker}_OI")
+                    # OI is published daily.  Ask for enough daily bars to
+                    # cover the whole requested range (weekly/monthly bars
+                    # span many days).
+                    try:
+                        _span_days = max((df.index[-1] - df.index[0]).days, 0)
+                    except Exception:
+                        _span_days = 0
+                    oi_n_bars = min(5000, max(int(n_bars), _span_days + 10))
                     for oi_sym_cand in oi_symbol_candidates:
                         try:
                             oi_symbol_formatted = self.__format_symbol(oi_sym_cand, exch_base, contract=None)
@@ -507,13 +616,12 @@ class TvDatafeed:
                             send_oi("quote_fast_symbols", [oi_quote, oi_symbol_formatted])
                             send_oi(
                                 "resolve_symbol",
-                                [oi_chart, "symbol_oi", '{"symbol":"' + oi_symbol_formatted + '","adjustment":"splits","session":"' + ('regular' if not extended_session else 'extended') + '"}'],
+                                [oi_chart, "symbol_oi", _build_resolve_payload(oi_symbol_formatted, extended_session)],
                             )
-                            # Follow Pine logic: intraday use same timeframe, else daily
-                            oi_interval = interval_value
-                            if interval in (Interval.in_daily, Interval.in_weekly, Interval.in_monthly):
-                                oi_interval = "1D"
-                            send_oi("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", oi_interval, n_bars])
+                            # The _OI symbol only supports a daily resolution;
+                            # intraday requests fail with series_error.
+                            oi_interval = "1D"
+                            send_oi("create_series", [oi_chart, "s_oi", "s_oi", "symbol_oi", oi_interval, oi_n_bars])
                             send_oi("switch_timezone", [oi_chart, timezone])
                             raw_oi = ""
                             while True:
@@ -524,99 +632,73 @@ class TvDatafeed:
                                     break
                                 if "series_completed" in result:
                                     break
+                                # Don't wait for the socket timeout when the
+                                # candidate symbol/resolution is invalid.
+                                if "series_error" in result or "symbol_error" in result:
+                                    break
                             try:
                                 ws_oi.close()
                             except Exception:
                                 pass
                             if '"s":[' in raw_oi:
-                                oi_df = self.__create_df(raw_oi, oi_symbol_formatted, timezone=timezone, interval=interval, align_daily_to_trading_day=align_daily_to_trading_day, exchange_tz=self.__extract_exchange_timezone(raw_oi))
+                                # Keep the raw session-open timestamps: the
+                                # mapper works with session boundaries and
+                                # also supports intraday output.
+                                oi_df = self.__create_df(
+                                    raw_oi,
+                                    oi_symbol_formatted,
+                                    timezone=timezone,
+                                    interval=Interval.in_daily,
+                                    align_daily_to_trading_day=False,
+                                    exchange_tz=self.__extract_exchange_timezone(raw_oi),
+                                )
                                 if oi_df is not None and len(oi_df) > 0:
                                     break
                         except Exception:
                             continue
                     if oi_df is not None and len(oi_df) > 0:
                         try:
-                            oi_series = oi_df['close'] if 'close' in oi_df.columns else oi_df.iloc[:, -1]
+                            aligned_daily = bool(
+                                df.attrs.get("aligned_to_trading_day", False)
+                            )
+                            attrs = dict(df.attrs)
                             df = df.copy()
-                            try:
-                                if interval in (Interval.in_daily, Interval.in_weekly, Interval.in_monthly):
-                                    # Map daily OI to daily bars
-                                    try:
-                                        oi_series.index = oi_series.index.normalize()
-                                        df_idx = df.index.copy()
-                                        if hasattr(df_idx, 'tz') and df_idx.tz is not None:
-                                            df_idx_norm = df_idx.tz_convert('UTC').tz_localize(None).normalize()
-                                        else:
-                                            df_idx_norm = pd.to_datetime(df_idx).normalize()
-                                        df['open_interest'] = oi_series.reindex(df_idx_norm).ffill().bfill().values
-                                    except Exception:
-                                        df['open_interest'] = oi_series.ffill().bfill().values[:len(df)]
-                                else:
-                                    df['open_interest'] = oi_series.reindex(df.index).ffill().bfill().values
-                            except Exception:
-                                try:
-                                    df['open_interest'] = oi_series.reindex(df.index).values
-                                    if hasattr(df['open_interest'], 'isna') and df['open_interest'].isna().all():
-                                        df['open_interest'] = float(oi_series.dropna().iloc[-1]) if len(oi_series.dropna()) > 0 else None
-                                    elif hasattr(df['open_interest'], 'ffill'):
-                                        df['open_interest'] = df['open_interest'].ffill().bfill()
-                                except Exception:
-                                    df['open_interest'] = float(oi_series.dropna().iloc[-1]) if len(oi_series.dropna()) > 0 else None
-                        except Exception:
-                            try:
-                                df = df.copy()
-                                df['open_interest'] = float(oi_df['close'].dropna().iloc[-1])
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
+                            df.attrs.update(attrs)
+                            df['open_interest'] = _map_open_interest_to_bars(
+                                df,
+                                oi_df,
+                                interval=interval,
+                                aligned_to_trading_day=aligned_daily,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "failed to map open interest for %s: %s",
+                                symbol_formatted,
+                                exc,
+                            )
+                except Exception as exc:
+                    logger.warning(
+                        "failed to fetch open interest for %s: %s",
+                        symbol_formatted,
+                        exc,
+                    )
                 if 'open_interest' not in df.columns:
-                    oi_val = None
-                    try:
-                        from . import futures as _futures_mod
-                        sym_base = symbol
-                        exch_base = exchange
-                        scan_sym = sym_base
-                        if isinstance(scan_sym, str) and not scan_sym.endswith('!'):
-                            scan_sym_try = f"{scan_sym}1!"
-                        else:
-                            scan_sym_try = scan_sym
-                        try:
-                            import requests
-                            body = {"columns": ["name", "exchange", "open_interest"], "filter": [{"left": "name", "operation": "equal", "right": scan_sym_try}], "range": [0, 10], "sort": {"sortBy": "name", "sortOrder": "asc"}}
-                            if exch_base:
-                                body["filter"].append({"left": "exchange", "operation": "equal", "right": str(exch_base).upper()})
-                            resp = requests.post(_futures_mod.SCAN_URL, json=body, headers=_futures_mod._SCAN_HEADERS, timeout=10, proxies=getattr(self, "proxies", None))
-                            if resp.ok:
-                                payload = resp.json()
-                                data = payload.get("data") or []
-                                for item in data:
-                                    if isinstance(item, dict):
-                                        vals = item.get("d")
-                                        if isinstance(vals, list):
-                                            rowmap = dict(zip(["name", "exchange", "open_interest"], vals))
-                                            if rowmap.get('open_interest') is not None:
-                                                oi_val = rowmap.get('open_interest')
-                                                break
-                        except Exception:
-                            pass
-                        if oi_val is None:
-                            try:
-                                rows, _ = _futures_mod._scan([{"left": "name", "operation": "equal", "right": scan_sym_try}] + ([{"left": "exchange", "operation": "equal", "right": str(exch_base).upper()}] if exch_base else []), 10, timeout=10, proxies=getattr(self, "proxies", None))
-                                if rows:
-                                    r = rows[0]
-                                    if r.get('open_interest') is not None:
-                                        oi_val = r.get('open_interest')
-                            except Exception:
-                                pass
-                    except Exception:
-                        oi_val = None
-                    if oi_val is not None:
-                        try:
-                            df = df.copy()
-                            df['open_interest'] = float(oi_val)
-                        except Exception:
-                            pass
+                    # No historical OI available.  Never broadcast the
+                    # current scanner value across every row: that would
+                    # silently invent data.
+                    logger.warning(
+                        "open interest history is not available for %s; "
+                        "the open_interest column will contain NaN",
+                        symbol_formatted,
+                    )
+                    df = df.copy()
+                    df['open_interest'] = float('nan')
+                elif df['open_interest'].isna().all():
+                    logger.warning(
+                        "open interest history is empty for %s; "
+                        "the open_interest column contains NaN",
+                        symbol_formatted,
+                    )
         except Exception:
             pass
         return df
