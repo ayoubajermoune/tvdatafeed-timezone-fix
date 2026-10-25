@@ -224,6 +224,34 @@ def test_missing_oi_returns_nan_not_a_constant():
         assert out.isna().all()
 
 
+@pytest.mark.skipif(
+    not hasattr(pd.DatetimeIndex(["2026-01-01"]), "as_unit"),
+    reason="DatetimeIndex.as_unit requires pandas >= 2",
+)
+def test_mixed_datetime_resolutions_are_normalized():
+    # pandas 3 defaults to microsecond resolution, while the OHLCV frame can
+    # still be nanosecond-based.  merge_asof requires identical units.
+    df = _df(
+        [
+            "2026-10-13 22:00:00+00:00",
+            "2026-10-14 22:00:00+00:00",
+        ],
+        aligned=True,
+    )
+    oi = _oi(
+        [
+            "2026-10-12 22:00:00+00:00",
+            "2026-10-13 22:00:00+00:00",
+        ],
+        [101.0, 102.0],
+    )
+    oi.index = oi.index.as_unit("us")
+
+    out = _map_open_interest_to_bars(df, oi, interval=Interval.in_daily)
+
+    assert out.tolist() == [101.0, 102.0]
+
+
 def test_naive_indexes_are_supported():
     df = _df(["2026-10-13 22:00:00", "2026-10-14 22:00:00"])
     oi = _oi(["2026-10-12 22:00:00"], [100.0])

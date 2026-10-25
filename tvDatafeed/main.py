@@ -90,6 +90,13 @@ def _map_open_interest_to_bars(
     if len(oi_series) == 0:
         return nan_series
 
+    def _merge_index(index):
+        """Use one datetime unit for both merge sides (pandas 3 uses us)."""
+        idx = pd.DatetimeIndex(index)
+        if idx.tz is not None:
+            idx = idx.tz_convert("UTC").tz_localize(None)
+        return idx.astype("datetime64[ns]")
+
     # Build the upper bound used to look up each bar's OI:
     # - weekly/monthly: the last session inside the period (next bar start
     #   minus 1 ns); the final bar gets the latest OI available.
@@ -110,6 +117,9 @@ def _map_open_interest_to_bars(
         )
     else:
         keys = pd.Series(df.index, index=df.index)
+
+    oi_series.index = _merge_index(oi_series.index)
+    keys = pd.Series(_merge_index(keys), index=df.index)
 
     left = pd.DataFrame({"__oi_key": keys}).sort_values("__oi_key")
     right = oi_series.rename("open_interest").to_frame().sort_index()
